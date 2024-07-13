@@ -33,9 +33,9 @@ def plot_2d(
             )
             axs[t_idx, dim].set_xticks([])
             axs[t_idx, dim].set_yticks([])
-            axs[t_idx, dim].set_title(f"${dim_name}(t={t})$")
+            axs[t_idx, dim].set_title(f"${dim_name}(t={t})$", fontsize=40)
 
-    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.01, top=0.99, wspace=0.2, hspace=0.2)
+    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.01, top=0.99, wspace=0.2, hspace=0.25)
     plt.savefig(filename)
 
 
