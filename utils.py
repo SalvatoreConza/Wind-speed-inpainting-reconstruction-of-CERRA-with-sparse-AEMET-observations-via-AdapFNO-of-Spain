@@ -347,15 +347,30 @@ def plot_predictions_2d(
     y_res: int = groundtruths.shape[3]
     aspect_ratio: float = y_res / x_res
 
+    # Set plot configuration
+    cmap: str = 'plasma'
+    vmin = min(groundtruths.min().item(), predictions.min().item())
+    vmax = max(groundtruths.max().item(), predictions.max().item())
+
     for idx in range(predictions.shape[0]):
         gt_field: torch.Tensor = groundtruths[idx]
         pred_field: torch.Tensor = predictions[idx]
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-        axs[0].imshow(gt_field.squeeze(dim=0), aspect=aspect_ratio, origin="lower", extent=[-1., 1., -1., 1.])
+        axs[0].imshow(
+            gt_field.squeeze(dim=0), 
+            aspect=aspect_ratio, origin="lower", 
+            extent=[-1., 1., -1., 1.], cmap=cmap,
+            vmin=vmin, vmax=vmax,
+        )
         axs[0].set_xticks([])
         axs[0].set_yticks([])
         axs[0].set_title(f'$groundtruth$', fontsize=20)
-        axs[1].imshow(pred_field.squeeze(dim=0), aspect=aspect_ratio, origin="lower", extent=[-1., 1., -1., 1.])
+        axs[1].imshow(
+            pred_field.squeeze(dim=0), 
+            aspect=aspect_ratio, origin="lower", 
+            extent=[-1., 1., -1., 1.], cmap=cmap,
+            vmin=vmin, vmax=vmax,
+        )
         axs[1].set_xticks([])
         axs[1].set_yticks([])
         if notes is None:

@@ -11,16 +11,16 @@ dataset:
 architecture:
   u_dim: 2
   width: 256
-  x_modes: 64
-  y_modes: 64
+  x_modes: 30
+  y_modes: 30
   from_checkpoint: null
 
 training:
   train_batch_size: 16
   val_batch_size: 16
   n_epochs: 100
-  learning_rate: 0.00001
-  patience: 10
+  learning_rate: 0.0001
+  patience: 5
   tolerance: 1e-4
   checkpoint_path: "./.checkpoints"
 

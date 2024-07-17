@@ -9,4 +9,4 @@ dataset:
   to_sample: 1000
 
 architecture:
-  from_checkpoint: .checkpoints/epoch16.pt
+  from_checkpoint: .checkpoints/epoch4.pt
