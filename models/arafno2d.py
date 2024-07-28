@@ -13,12 +13,19 @@ class FrequencyLinearTransformation(nn.Module):
 
     def __init__(self, t_dim: int, u_dim: int, x_modes: int, y_modes: int):
         super().__init__()
+        self.t_dim: int = t_dim
+        self.u_dim: int = u_dim
+        self.x_modes: int = x_modes
+        self.y_modes: int = y_modes
         scale: float = t_dim * u_dim * u_dim * x_modes * y_modes
         weights = torch.empty(t_dim, u_dim, u_dim, x_modes, y_modes, dtype=torch.cfloat)
+        print(f'weights: {weights.shape}')
         nn.init.normal_(weights, mean=0.0, std=1.0 / scale)
-        self.weights = nn.Parameter(weights)
+        self.weights = nn.Parameter(data=weights)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
+        print(f'input: {input.shape}')
+        print(f'self.weights: {self.weights.shape}')
         return torch.einsum("btixy,tioxy->btoxy", input, self.weights)
 
 
@@ -66,12 +73,11 @@ class AutoRegressiveAdaptiveSpectralConv2d(nn.Module):
         x_modes: int,
         y_modes: int,
     ):
-        super().__init__()
-
         """
         Adaptive 2D Fourier layer. It does FFT, linear transform, and Inverse FFT.
         All the process is conducted with adaptive x_modes and y_modes
         """
+        super().__init__()
 
         self.window_size: int = window_size
         self.u_dim: int = u_dim
@@ -102,6 +108,7 @@ class AutoRegressiveAdaptiveSpectralConv2d(nn.Module):
         out_fft: torch.Tensor = out_fft[:, :, :, :self.x_modes, :self.y_modes]
 
         # Linear transformation
+        print(f'out_fft: {out_fft.shape}')
         out_linear: torch.Tensor = self.R(input=out_fft)
         assert out_linear.shape == (batch_size, self.window_size, self.u_dim, self.x_modes, self.y_modes)
 
@@ -114,10 +121,31 @@ class AutoRegressiveAdaptiveSpectralConv2d(nn.Module):
         assert out_linear.shape == (batch_size, 1, self.u_dim, self.x_modes, self.y_modes)
 
         # Inverse Fourier transform
-        # out_ifft: torch.Tensor = torch.fft.irfft2(out_linear, s=(x_res, y_res))
         out_ifft: torch.Tensor = torch.fft.ifft2(out_linear, s=(x_res, y_res))
         assert out_ifft.shape == (batch_size, 1, self.u_dim, x_res, y_res)
         return out_ifft
+
+
+class LocalLinearTransformation(nn.Module):
+
+    def __init__(self, window_size: int, u_dim: int):
+        super().__init__()
+        self.window_size: int = window_size
+        self.u_dim: int = u_dim
+        self.linear_transformation: nn.Module = nn.Conv2d(
+            in_channels=window_size * u_dim, out_channels=window_size * u_dim, kernel_size=1,
+        )
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        assert input.ndim == 5
+        batch_size = input.shape[0]
+        x_res: int = input.shape[3]
+        y_res: int = input.shape[4]
+        assert input.shape == (batch_size, self.window_size, self.u_dim, x_res, y_res)
+        input: torch.Tensor = input.reshape(batch_size, self.window_size * self.u_dim, x_res, y_res)
+        output: torch.Tensor = self.linear_transformation(input=input)
+        output: torch.Tensor = output.reshape(batch_size, self.window_size, self.u_dim, x_res, y_res)
+        return output
 
 
 class LiftingLayer(nn.Module):
@@ -163,7 +191,7 @@ class AutoRegressiveAdaptiveFNO2d(nn.Module):
         self.Q = LiftingLayer(in_features=self.width, out_features=u_dim)
 
         self.spectral_convolutions = nn.ModuleList(modules=[])
-        self.linear_transformations = nn.ModuleList(modules=[])
+        self.local_linear_transformations = nn.ModuleList(modules=[])
         for _ in range(depth):
             self.spectral_convolutions.append(
                 AutoRegressiveAdaptiveSpectralConv2d(
@@ -171,8 +199,8 @@ class AutoRegressiveAdaptiveFNO2d(nn.Module):
                     x_modes=self.x_modes, y_modes=self.y_modes
                 )
             )
-            self.linear_transformations.append(
-                nn.Conv2d(in_channels=self.width, out_channels=self.width, kernel_size=1)    
+            self.local_linear_transformations.append(
+                LocalLinearTransformation(window_size=window_size, u_dim=width)
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -191,14 +219,19 @@ class AutoRegressiveAdaptiveFNO2d(nn.Module):
         output: torch.Tensor = lifted_input
         for i in range(self.depth):
             spectral_conv = self.spectral_convolutions[i]
-            local_linear_tranformation = self.linear_transformations[i]
+            local_linear_tranformation = self.local_linear_transformations[i]
+            print(i)
+            print(output.shape)
+            print('----')
             out1: torch.Tensor = spectral_conv(output)
             out2: torch.Tensor = local_linear_tranformation(output)
+            print(f'out1: {out1.shape}')
+            print(f'out2: {out2.shape}')
 
             assert out1.shape == out2.shape, (
                 f'both out1 and out2 must have the same shape as '
                 f'(batch_size, self.window_size, self.width, self.x_res, self.x_res) ' 
-                f'= {(batch_size, self.window_size, self.width, self.x_modes, self.y_modes)}'
+                f'= {(batch_size, 1, self.width, self.x_modes, self.y_modes)}'
             )
             output: torch.Tensor = out1 + out2
             output: torch.Tensor = F.gelu(output)
