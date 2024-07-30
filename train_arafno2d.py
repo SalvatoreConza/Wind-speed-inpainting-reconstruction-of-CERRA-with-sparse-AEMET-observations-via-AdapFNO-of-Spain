@@ -64,7 +64,7 @@ def main(config: Dict[str, Any]) -> None:
     if from_checkpoint is not None:
         checkpoint_loader = CheckpointLoader(checkpoint_path=from_checkpoint)
         net: nn.Module; optimizer: Optimizer
-        net, optimizer = checkpoint_loader.load()
+        net, optimizer = checkpoint_loader.load(scope=globals())
     else:
         net: nn.Module = AutoRegressiveAdaptiveFNO2d(
             window_size=window_size, u_dim=u_dim, 
