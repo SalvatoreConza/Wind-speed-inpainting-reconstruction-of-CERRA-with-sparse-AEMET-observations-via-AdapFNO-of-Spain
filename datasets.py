@@ -55,17 +55,22 @@ class AutoRegressiveDiffReact2d(Dataset):
         self,
         dataroot: str,
         window_size: int,
+        from_sample: int,
+        to_sample: int,
         resolution: Optional[Tuple[int, int]] = None,
     ):
         super().__init__()
         self.dataroot: str = dataroot
         self.window_size: int = window_size
+        self.from_sample: int = from_sample
+        self.to_sample: int = to_sample
         self.resolution: Optional[Tuple[int, int]] = resolution
+        
         self.file = h5py.File(name=dataroot, mode='r')
-        self.n_samples = len(self.file.keys())
+        self.n_samples = to_sample - from_sample + 1
 
         self.indices: List[Tuple[int, int]] = []
-        for sample_index in range(self.n_samples):
+        for sample_index in range(from_sample, to_sample + 1):
             for target_timestep in range(self.window_size, 101):
                 self.indices.append((sample_index, target_timestep))
 
@@ -105,6 +110,8 @@ class MultiStepDiffReact2d(Dataset):
         dataroot: str,
         input_timesteps: List[int],
         target_timestep: int,
+        from_sample: int,
+        to_sample: int,
         resolution: Optional[Tuple[int, int]] = None,
     ):
         super().__init__()
@@ -114,13 +121,16 @@ class MultiStepDiffReact2d(Dataset):
         self.dataroot: str = dataroot
         self.input_timesteps: List[int] = input_timesteps
         self.target_timestep: int = target_timestep
-        self.n_prediction_steps: int = target_timestep - input_timesteps[-1] + 1
+        self.n_prediction_steps: int = target_timestep - input_timesteps[-1]
+
+        self.from_sample: int = from_sample
+        self.to_sample: int = to_sample
 
         self.resolution: Optional[Tuple[int, int]] = resolution
         self.file = h5py.File(name=dataroot, mode='r')
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        key: str = f'{str(idx).zfill(4)}/data'
+        key: str = f'{str(self.from_sample + idx).zfill(4)}/data'
         # get full array
         data: np.ndarray = np.array(self.file[key])
         # get the input tensor
@@ -135,7 +145,7 @@ class MultiStepDiffReact2d(Dataset):
         return input, target
 
     def __len__(self) -> int:
-        return len(self.file.keys())
+        return self.to_sample - self.from_sample + 1
 
     def __del__(self):
         self.file.close()
@@ -146,13 +156,23 @@ class MultiStepDiffReact2d(Dataset):
 
 
 
+# TEST
 if __name__ == '__main__':
 
     self = AutoRegressiveDiffReact2d(
         dataroot='data/2D/diffusion-reaction/2D_diff-react_NA_NA.h5',
         window_size=5,
+        from_sample=0,
+        to_sample=979,
         resolution=None,
-        device=torch.device('cuda')
+    )
+    self = MultiStepDiffReact2d(
+        dataroot='data/2D/diffusion-reaction/2D_diff-react_NA_NA.h5',
+        input_timesteps=list(range(5)),
+        target_timestep=100,
+        from_sample=980,
+        to_sample=999,
+        resolution=None,
     )
 
 

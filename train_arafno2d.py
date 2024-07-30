@@ -27,7 +27,8 @@ def main(config: Dict[str, Any]) -> None:
     dataset_path: str                   = str(config['dataset']['path'])
     window_size: int                    = int(config['dataset']['window_size'])
     resolution: Optional[List[int,int]] = config['dataset']['resolution']
-    seen_samples: int                   = int(config['dataset']['seen_samples'])
+    from_sample: int                    = int(config['dataset']['from_sample'])
+    to_sample: int                      = int(config['dataset']['to_sample'])
     dataset_split: Tuple[float, float]  = tuple(config['dataset']['split'])
 
     u_dim: int                          = int(config['architecture']['u_dim'])
@@ -50,11 +51,12 @@ def main(config: Dict[str, Any]) -> None:
     full_dataset = AutoRegressiveDiffReact2d(
         dataroot=dataset_path,
         window_size=window_size,
-        resolution=tuple(resolution),
+        from_sample=from_sample,
+        to_sample=to_sample,
+        resolution=tuple(resolution) if resolution else None,
     )
-    subset = Subset(dataset=full_dataset, indices=list(range(seen_samples)))
     train_dataset, val_dataset = random_split(
-        dataset=subset,
+        dataset=full_dataset,
         lengths=dataset_split,
     )
 

@@ -34,13 +34,14 @@ def main(config: Dict[str, Any]) -> None:
     from_checkpoint: str                = str(config['architecture']['from_checkpoint'])
 
     # Initialize the training datasets
-    full_dataset = MultiStepDiffReact2d(
+    test_dataset = MultiStepDiffReact2d(
         dataroot=dataset_path,
         input_timesteps=input_timesteps,
         target_timestep=target_timestep,
-        resolution=tuple(resolution),
+        from_sample=from_sample,
+        to_sample=to_sample,
+        resolution=tuple(resolution) if resolution else None,
     )
-    test_dataset = Subset(dataset=full_dataset, indices=list(range(from_sample, to_sample)))
 
     # Load model
     checkpoint_loader = CheckpointLoader(checkpoint_path=from_checkpoint)

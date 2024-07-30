@@ -168,7 +168,7 @@ class Predictor:
                 batch_input: torch.Tensor = batch_input.to(device=self.device)
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 # Make multi-step prediction
-                for t in range(1, dataset.dataset.n_prediction_steps + 1):
+                for t in range(1, dataset.n_prediction_steps + 1):
                     batch_prediction: torch.Tensor = self.model(input=batch_input)
                     assert batch_prediction.shape == (batch_size, 1, u_dim, x_res, y_res)
                     n_retained_steps: int = n_input_timesteps - 1
