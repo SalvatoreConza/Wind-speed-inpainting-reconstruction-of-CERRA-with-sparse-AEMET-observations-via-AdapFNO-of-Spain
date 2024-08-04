@@ -155,6 +155,18 @@ class MultiStepDiffReact2d(Dataset):
         return F.interpolate(tensor, size=self.resolution, mode='bilinear', align_corners=False)
 
 
+class AutoRegressiveERA5(Dataset):
+
+    def __init__(
+        self,
+        dataroot: str,
+        window_size: int,
+        from_sample: int,
+        to_sample: int,
+        resolution: Optional[Tuple[int, int]] = None,
+    ):
+        pass
+
 
 # TEST
 if __name__ == '__main__':
