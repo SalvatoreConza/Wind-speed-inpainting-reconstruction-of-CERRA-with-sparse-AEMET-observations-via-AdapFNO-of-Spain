@@ -73,7 +73,7 @@ class Trainer:
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 self.optimizer.zero_grad()
                 batch_prediction: torch.Tensor = self.model(input=batch_input)
-                mean_power_error, mean_weight_magnitude, loss = self.loss_function(
+                mean_scaled_error, mean_power_error, mean_weight_magnitude, loss = self.loss_function(
                     spectral_weights=[
                         layer.Ws.weights for layer in self.model.spectral_convolutions
                     ],
@@ -85,6 +85,7 @@ class Trainer:
 
                 # Accumulate the metrics
                 train_metrics.add(
+                    total_scaled_error=mean_scaled_error.item() * batch_size,
                     total_power_error=mean_power_error.item() * batch_size, 
                     total_weight_magnitude=mean_weight_magnitude.item() * batch_size,
                     total_loss=loss.item() * batch_size,
@@ -95,6 +96,7 @@ class Trainer:
                     epoch=epoch, n_epochs=n_epochs, 
                     batch=batch, n_batches=len(self.train_dataloader), 
                     took=timer.time_batch(epoch, batch), 
+                    train_scaled_error=train_metrics['total_scaled_error'] / train_metrics['n_samples'], 
                     train_power_error=train_metrics['total_power_error'] / train_metrics['n_samples'], 
                     train_weight_magnitude=train_metrics['total_weight_magnitude'] / train_metrics['n_samples'], 
                     train_loss=train_metrics['total_loss'] / train_metrics['n_samples'], 
@@ -112,11 +114,12 @@ class Trainer:
             train_metrics.reset()
             
             # Evaluate
-            val_power_error, val_weight_magnitude, val_loss = self.evaluate()
+            val_scaled_error, val_power_error, val_weight_magnitude, val_loss = self.evaluate()
             timer.end_epoch(epoch)
             logger.log(
                 epoch=epoch, n_epochs=n_epochs, 
                 took=timer.time_epoch(epoch), 
+                val_scaled_error=val_scaled_error,
                 val_power_error=val_power_error, 
                 val_weight_magnitude=val_weight_magnitude,
                 val_loss=val_loss,
@@ -147,7 +150,7 @@ class Trainer:
                 batch_input: torch.Tensor = batch_input.to(device=self.device)
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 batch_prediction: torch.Tensor = self.model(input=batch_input)
-                mean_power_error, mean_weight_magnitude, loss = self.loss_function(
+                mean_scaled_error, mean_power_error, mean_weight_magnitude, loss = self.loss_function(
                     spectral_weights=[
                         layer.Ws.weights for layer in self.model.spectral_convolutions
                     ],
@@ -156,6 +159,7 @@ class Trainer:
                 )
                 # Accumulate the val_metrics
                 val_metrics.add(
+                    total_scaled_error=mean_scaled_error.item() * batch_size,
                     total_power_error=mean_power_error.item() * batch_size, 
                     total_weight_magnitude=mean_weight_magnitude.item() * batch_size,
                     total_loss=loss.item() * batch_size,
@@ -163,10 +167,11 @@ class Trainer:
                 )
 
         # Compute the aggregate metrics
+        val_scaled_error: float = val_metrics['total_scaled_error'] / val_metrics['n_samples']
         val_power_error: float = val_metrics['total_power_error'] / val_metrics['n_samples']
         val_weight_magnitude: float = val_metrics['total_weight_magnitude'] / val_metrics['n_samples']
         val_loss: float = val_metrics['total_loss'] / val_metrics['n_samples']
-        return val_power_error, val_weight_magnitude, val_loss
+        return val_scaled_error, val_power_error, val_weight_magnitude, val_loss
 
 
 class Predictor:

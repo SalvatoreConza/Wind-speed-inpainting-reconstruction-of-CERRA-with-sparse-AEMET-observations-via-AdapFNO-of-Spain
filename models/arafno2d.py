@@ -18,7 +18,7 @@ class FrequencyLinearTransformation(nn.Module):
         self.x_modes: int = x_modes
         self.y_modes: int = y_modes
         weights = torch.empty(t_dim, u_dim, u_dim, x_modes, y_modes, dtype=torch.cfloat)
-        nn.init.normal_(weights, mean=0.0, std=0.01)
+        nn.init.kaiming_normal_(weights)
         self.weights = nn.Parameter(data=weights)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -36,7 +36,7 @@ class SpectralAggregateLayer(nn.Module):
         self.x_modes: int = x_modes
         self.y_modes: int = y_modes
         weights: torch.Tensor = torch.empty(u_dim, x_modes, y_modes, dtype=torch.float)
-        nn.init.normal_(weights, mean=0.0, std=1.0 / 0.01)
+        nn.init.kaiming_normal_(weights)
         self.weights = nn.Parameter(weights)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:

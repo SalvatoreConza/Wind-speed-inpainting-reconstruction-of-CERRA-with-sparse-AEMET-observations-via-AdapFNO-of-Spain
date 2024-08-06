@@ -20,8 +20,9 @@ class RegularizedPowerError(nn.Module):
         power_error: torch.Tensor = (
             (prediction - groundtruth).abs() ** self.power
         ).mean()
+        scaled_error: torch.Tensor = power_error ** (1 / self.power)
         weight_magnitude: torch.Tensor = torch.stack(
             tensors=spectral_weights, dim=0
         ).abs().mean()
-        return power_error, weight_magnitude, power_error + self.lambda_ * weight_magnitude
+        return scaled_error, power_error, weight_magnitude, power_error + self.lambda_ * weight_magnitude
 
