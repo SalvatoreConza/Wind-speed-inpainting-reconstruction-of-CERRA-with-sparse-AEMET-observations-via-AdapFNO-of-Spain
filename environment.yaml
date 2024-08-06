@@ -68,8 +68,12 @@ dependencies:
   - zstd=1.5.6=ha6fb4c9_0
   - pip:
       - attrs==24.1.0
+      - cads-api-client==1.2.0
+      - cdsapi==0.7.0
+      - certifi==2024.7.4
       - cffi==1.16.0
       - cfgrib==0.9.14.0
+      - charset-normalizer==3.3.2
       - click==8.1.7
       - contourpy==1.2.1
       - cycler==0.12.1
@@ -79,11 +83,13 @@ dependencies:
       - fonttools==4.53.1
       - fsspec==2024.6.1
       - h5py==3.11.0
+      - idna==3.7
       - jinja2==3.1.4
       - kiwisolver==1.4.5
       - markupsafe==2.1.5
       - matplotlib==3.9.1
       - mpmath==1.3.0
+      - multiurl==0.3.1
       - networkx==3.3
       - numpy==2.0.0
       - nvidia-cublas-cu12==12.1.3.1
@@ -106,12 +112,15 @@ dependencies:
       - python-dateutil==2.9.0.post0
       - pytz==2024.1
       - pyyaml==6.0.1
+      - requests==2.32.3
       - six==1.16.0
       - sympy==1.13.0
       - torch==2.3.1
       - torchvision==0.18.1
+      - tqdm==4.66.5
       - triton==2.3.1
       - typing-extensions==4.12.2
       - tzdata==2024.1
+      - urllib3==2.2.2
       - xarray==2024.7.0
 prefix: /opt/conda/envs/neural_operator

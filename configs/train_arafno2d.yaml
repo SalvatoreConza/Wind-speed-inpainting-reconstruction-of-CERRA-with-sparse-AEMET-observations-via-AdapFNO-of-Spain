@@ -17,6 +17,7 @@ architecture:
   from_checkpoint: .checkpoints/arafno2d/epoch2.pt
 
 training:
+  spectral_regularization_coef: 1.
   train_batch_size: 32
   val_batch_size: 32
   learning_rate: 0.0001   # has no effect if architecture.from_checkpoint is not null

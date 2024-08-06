@@ -24,24 +24,25 @@ class FrequencyLinearTransformation(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         batch_size, t_dim, u_dim, x_modes, y_modes = input.shape
-        assert self.t_dim == t_dim
-        assert self.u_dim == u_dim
-        assert self.x_modes == x_modes
-        assert self.y_modes == y_modes
-        return torch.einsum("btixy,tioxy->btoxy", input, self.weights)
+        output: torch.Tensor = torch.einsum("btixy,tioxy->btoxy", input, self.weights)
+        assert output.shape == input.shape == (batch_size, self.t_dim, self.u_dim, self.x_modes, self.y_modes)
+        return output
 
 
 class SpectralAggregateLayer(nn.Module):
 
-    def __init__(self, x_modes: int, y_modes: int):
+    def __init__(self, u_dim: int, x_modes: int, y_modes: int):
         super().__init__()
+        self.u_dim: int = u_dim
         self.x_modes: int = x_modes
         self.y_modes: int = y_modes
-        weights = torch.rand(x_modes, y_modes, dtype=torch.float)
+        scale: float = u_dim * x_modes * y_modes
+        weights: torch.Tensor = torch.empty(u_dim, x_modes, y_modes, dtype=torch.float)
+        nn.init.normal_(weights, mean=0.0, std=1.0 / scale)
         self.weights = nn.Parameter(weights)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        assert input.shape[-2:] == (self.x_modes, self.y_modes)
+        assert input.shape[-3:] == (self.u_dim, self.x_modes, self.y_modes)
         # self.weights is broadcasted to input.shape
         output: torch.Tensor = input * self.weights
         assert output.shape == input.shape
@@ -88,7 +89,7 @@ class AutoRegressiveAdaptiveSpectralConv2d(nn.Module):
         self.y_modes: int = y_modes
 
         self.R = FrequencyLinearTransformation(t_dim=window_size, u_dim=u_dim, x_modes=x_modes, y_modes=y_modes)
-        self.Ws = SpectralAggregateLayer(x_modes=x_modes, y_modes=y_modes)
+        self.Ws = SpectralAggregateLayer(u_dim=u_dim, x_modes=x_modes, y_modes=y_modes)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         assert input.ndim == 5, 'Expected input of shape: (batch_size, window_size, self.u_dim, x_modes, y_modes)'
@@ -109,12 +110,12 @@ class AutoRegressiveAdaptiveSpectralConv2d(nn.Module):
         # Truncate max x_modes, y_modes
         out_fft: torch.Tensor = out_fft[:, :, :, :self.x_modes, :self.y_modes]
 
+        # Apply spectral weights
+        out_fft: torch.Tensor = self.Ws(out_fft)
+        assert out_fft.shape == (batch_size, self.window_size, self.u_dim, self.x_modes, self.y_modes)
+
         # Linear transformation
         out_linear: torch.Tensor = self.R(input=out_fft)
-        assert out_linear.shape == (batch_size, self.window_size, self.u_dim, self.x_modes, self.y_modes)
-
-        # Apply spectral weights
-        out_linear: torch.Tensor = self.Ws(out_linear)
         assert out_linear.shape == (batch_size, self.window_size, self.u_dim, self.x_modes, self.y_modes)
 
         # Inverse Fourier transform
@@ -299,7 +300,6 @@ class AutoRegressiveAdaptiveFNO2d(nn.Module):
         # Projection
         projected_output: torch.Tensor = F.gelu(self.Q(fourier_output))
         assert projected_output.shape == (batch_size, 1, self.u_dim, x_res, y_res)
-
         return projected_output
 
 

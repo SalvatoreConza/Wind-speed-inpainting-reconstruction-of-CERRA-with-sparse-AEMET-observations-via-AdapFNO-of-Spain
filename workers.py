@@ -10,23 +10,27 @@ from utils.training import Accumulator, EarlyStopping, Timer, Logger, Checkpoint
 from utils.plotting import plot_predictions_2d
 from utils.functional import compute_velocity_field
 
+from models.arafno2d import AutoRegressiveAdaptiveFNO2d
 from datasets import AutoRegressiveDiffReact2d, MultiStepDiffReact2d
+from losses import RegularizedPowerError
+
 
 class Trainer:
 
     def __init__(
         self, 
-        model: nn.Module,
+        model: AutoRegressiveAdaptiveFNO2d,
         optimizer: Optimizer,
+        spectral_regularization_coef: float,
         train_dataset: AutoRegressiveDiffReact2d,
         val_dataset: AutoRegressiveDiffReact2d,
         train_batch_size: int,
         val_batch_size: int,
         device: torch.device,
     ):
-        super().__init__()
         self.model: nn.Module = model.to(device=device)
         self.optimizer: Optimizer = optimizer
+        self.spectral_regularization_coef: float = spectral_regularization_coef
         self.train_dataset: Dataset = train_dataset
         self.val_dataset: Dataset = val_dataset
         self.train_batch_size: int = train_batch_size
@@ -35,7 +39,7 @@ class Trainer:
 
         self.train_dataloader = DataLoader(dataset=train_dataset, batch_size=train_batch_size, shuffle=True)
         self.val_dataloader = DataLoader(dataset=val_dataset, batch_size=val_batch_size, shuffle=False)
-        self.loss_function: nn.Module = nn.MSELoss(reduction='mean')
+        self.loss_function: nn.Module = RegularizedPowerError(lambda_=spectral_regularization_coef, power=2)
 
     def train(
         self, 
@@ -69,15 +73,21 @@ class Trainer:
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 self.optimizer.zero_grad()
                 batch_prediction: torch.Tensor = self.model(input=batch_input)
-                mse_loss = self.loss_function(
-                    input=batch_prediction, target=batch_groundtruth,
+                mean_power_error, mean_weight_magnitude, loss = self.loss_function(
+                    spectral_weights=[
+                        layer.Ws.weights for layer in self.model.spectral_convolutions
+                    ],
+                    prediction=batch_prediction, 
+                    groundtruth=batch_groundtruth,
                 )
-                mse_loss.backward()
+                loss.backward()
                 self.optimizer.step()
 
                 # Accumulate the metrics
                 train_metrics.add(
-                    total_mse=mse_loss.item() * batch_size, 
+                    total_power_error=mean_power_error.item() * batch_size, 
+                    total_weight_magnitude=mean_weight_magnitude.item() * batch_size,
+                    total_loss=loss.item() * batch_size,
                     n_samples=batch_size,
                 )
                 timer.end_batch(epoch=epoch)
@@ -85,8 +95,9 @@ class Trainer:
                     epoch=epoch, n_epochs=n_epochs, 
                     batch=batch, n_batches=len(self.train_dataloader), 
                     took=timer.time_batch(epoch, batch), 
-                    train_mse=train_metrics['total_mse'] / train_metrics['n_samples'], 
-                    train_rmse=(train_metrics['total_mse'] / train_metrics['n_samples']) ** 0.5, 
+                    train_power_error=train_metrics['total_power_error'] / train_metrics['n_samples'], 
+                    train_weight_magnitude=train_metrics['total_weight_magnitude'] / train_metrics['n_samples'], 
+                    train_loss=train_metrics['total_loss'] / train_metrics['n_samples'], 
                 )
         
             # Ragularly save checkpoint
@@ -101,16 +112,18 @@ class Trainer:
             train_metrics.reset()
             
             # Evaluate
-            val_mse, val_rmse = self.evaluate()
+            val_power_error, val_weight_magnitude, val_loss = self.evaluate()
             timer.end_epoch(epoch)
             logger.log(
                 epoch=epoch, n_epochs=n_epochs, 
                 took=timer.time_epoch(epoch), 
-                val_mse=val_mse, val_rmse=val_rmse,
+                val_power_error=val_power_error, 
+                val_weight_magnitude=val_weight_magnitude,
+                val_loss=val_loss,
             )
             print('=' * 20)
 
-            early_stopping(val_rmse)
+            early_stopping(value=val_power_error)
             if early_stopping:
                 print('Early Stopped')
                 break
@@ -134,19 +147,26 @@ class Trainer:
                 batch_input: torch.Tensor = batch_input.to(device=self.device)
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 batch_prediction: torch.Tensor = self.model(input=batch_input)
-                mse_loss = self.loss_function(
-                    input=batch_prediction, target=batch_groundtruth,
+                mean_power_error, mean_weight_magnitude, loss = self.loss_function(
+                    spectral_weights=[
+                        layer.Ws.weights for layer in self.model.spectral_convolutions
+                    ],
+                    prediction=batch_prediction, 
+                    groundtruth=batch_groundtruth,
                 )
                 # Accumulate the val_metrics
                 val_metrics.add(
-                    total_mse=mse_loss.item() * batch_size,
+                    total_power_error=mean_power_error.item() * batch_size, 
+                    total_weight_magnitude=mean_weight_magnitude.item() * batch_size,
+                    total_loss=loss.item() * batch_size,
                     n_samples=batch_size,
                 )
 
         # Compute the aggregate metrics
-        val_mse: float = val_metrics['total_mse'] / val_metrics['n_samples']
-        val_rmse: float = val_mse ** 0.5
-        return val_mse, val_rmse
+        val_power_error: float = val_metrics['total_power_error'] / val_metrics['n_samples']
+        val_weight_magnitude: float = val_metrics['total_weight_magnitude'] / val_metrics['n_samples']
+        val_loss: float = val_metrics['total_loss'] / val_metrics['n_samples']
+        return val_power_error, val_weight_magnitude, val_loss
 
 
 class Predictor:
@@ -154,7 +174,7 @@ class Predictor:
     def __init__(self, model: nn.Module, device: torch.device) -> None:
         self.model: nn.Module = model.to(device=device)
         self.device: torch.device = device
-        self.loss_function: nn.Module = nn.MSELoss(reduction='mean')
+        self.mse_loss: nn.Module = nn.MSELoss(reduction='mean')
 
     def predict(self, dataset: MultiStepDiffReact2d) -> None:
         self.model.eval()
