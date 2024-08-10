@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils.data import random_split
 from torch.optim import Optimizer, Adam
 
-from models.arafno2d import AutoRegressiveAdaptiveFNO2d
+from legacy.models.arafno2d import AutoRegressiveAdaptiveFNO2d
 from legacy.datasets.pdebench import AutoRegressiveDiffReact2d
 from common.training import CheckpointLoader
 from legacy.workers import Trainer

@@ -1,39 +1,42 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from models.modules import (
-    AutoRegressiveAdaptiveSpectralConv2d, FeatureNormalization, 
-    LiftingLayer, LocalLinearTransformation, TemporalAggregateLayer,
+    AutoRegressiveAdaptiveSpectralConv2d, 
+    FeatureNormalization, 
+    LiftingLayer, 
+    LocalLinearTransformation, 
+    TemporalAggregateLayer,
 )
 
 
-class AdaptiveFNO(nn.Module):
+class AutoRegressiveAdaptiveFNO2d(nn.Module):
 
     def __init__(
         self, 
-        in_timesteps: int, 
-        out_timesteps: int, 
-        u_dim: int, 
+        window_size: int,
+        u_dim: int,
         width: int, 
-        depth: int, 
+        depth: int,
         x_modes: int, 
         y_modes: int,
     ):
         super().__init__()
 
-        self.in_timesteps: int = in_timesteps
-        self.out_timesteps: int = out_timesteps
+        self.window_size: int = window_size
         self.u_dim: int = u_dim
         self.width: int = width
         self.depth: int = depth
         self.x_modes: int = x_modes
         self.y_modes: int = y_modes
-        
+
         assert width > u_dim, '`width` should be greater than `u_dim` for the model to uplift the input dim'
+
         self.P = LiftingLayer(in_features=u_dim, out_features=self.width)
         self.Q = LiftingLayer(in_features=self.width, out_features=u_dim)
-        self.Wt = TemporalAggregateLayer(in_timesteps=in_timesteps, out_timesteps=out_timesteps)
+        self.Wt = TemporalAggregateLayer(in_timesteps=window_size, out_timesteps=1)
 
         self.spectral_convolutions = nn.ModuleList(modules=[])
         self.local_linear_transformations = nn.ModuleList(modules=[])
@@ -42,28 +45,28 @@ class AdaptiveFNO(nn.Module):
         for _ in range(depth):
             self.spectral_convolutions.append(
                 AutoRegressiveAdaptiveSpectralConv2d(
-                    t_dim=self.in_timesteps, u_dim=self.width, 
+                    t_dim=self.window_size, u_dim=self.width, 
                     x_modes=self.x_modes, y_modes=self.y_modes
                 )
             )
             self.local_linear_transformations.append(
-                LocalLinearTransformation(t_dim=in_timesteps, u_dim=width)
+                LocalLinearTransformation(t_dim=window_size, u_dim=width)
             )
             self.feature_normalizations.append(
-                FeatureNormalization(normalized_shape=(self.in_timesteps, self.width), dims=(1, 2))
+                FeatureNormalization(normalized_shape=(self.window_size, self.width), dims=(1, 2))
             )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        # input dim = [batch_size, in_timesteps, u_dim, x_res, y_res)
+        # input dim = [batch_size, window_size, u_dim, x_res, y_res)
         batch_size: int = input.shape[0]
         x_res: int = input.shape[3]
         y_res: int = input.shape[4]
-        assert self.in_timesteps == input.shape[1]
+        assert self.window_size == input.shape[1]
         assert self.u_dim == input.shape[2]
 
         # UpLifting
         lifted_input: torch.Tensor = self.P(input)
-        assert lifted_input.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res)
+        assert lifted_input.shape == (batch_size, self.window_size, self.width, x_res, y_res)
 
         # Fourier Layers
         fourier_output: torch.Tensor = lifted_input
@@ -75,9 +78,9 @@ class AdaptiveFNO(nn.Module):
             local_linear_tranformation = self.local_linear_transformations[i]
             out2: torch.Tensor = local_linear_tranformation(fourier_output)
             # Connection
-            assert out1.shape == out2.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res), (
+            assert out1.shape == out2.shape == (batch_size, self.window_size, self.width, x_res, y_res), (
                 f'both out1 and out2 must have the same shape as '
-                f'(batch_size, self.in_timesteps, self.width, self.x_res, self.y_res), '
+                f'(batch_size, self.window_size, self.width, self.x_res, self.y_res), '
                 f'got out1.shape = {out1.shape} and out2.shape = {out2.shape}'
             )
             fourier_output: torch.Tensor = out1 + out2
@@ -89,60 +92,28 @@ class AdaptiveFNO(nn.Module):
             fourier_output: torch.Tensor = F.gelu(fourier_output)
 
         # Apply temporal weights
-        assert fourier_output.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res)
+        assert fourier_output.shape == (batch_size, self.window_size, self.width, x_res, y_res)
         fourier_output: torch.Tensor = self.Wt(fourier_output)
-        assert fourier_output.shape == (batch_size, self.out_timesteps, self.width, x_res, y_res)
+        assert fourier_output.shape == (batch_size, 1, self.width, x_res, y_res)
         # Projection
         projected_output: torch.Tensor = F.gelu(self.Q(fourier_output))
-        assert projected_output.shape == (batch_size, self.out_timesteps, self.u_dim, x_res, y_res)
+        assert projected_output.shape == (batch_size, 1, self.u_dim, x_res, y_res)
         return projected_output
 
 
-class WindNet(nn.Module):
-
-    def __init__(
-        self, 
-        global_operator: AdaptiveFNO,
-        local_opereator: AdaptiveFNO,
-    ):
-        super().__init__()
-        self.global_operator: AdaptiveFNO = global_operator
-        self.local_opereator: AdaptiveFNO = local_opereator
-    
-    def forward(self, global_input: torch.Tensor, local_input: torch.Tensor) -> torch.Tensor:
-        assert global_input.shape == local_input.shape
-        # Get glocal context
-        global_context: torch.Tensor = global_operator(input=global_input)
-        # Get local context
-        local_context: torch.Tensor = local_operator(input=local_input)
-        assert global_context.shape == local_context.shape
-        return global_context + local_context
-
-
-
+# TEST
 if __name__ == '__main__':
-
-    global_input: torch.Tensor = torch.rand((32, 12, 2, 64, 64))
-    local_input: torch.Tensor = torch.rand((32, 12, 2, 64, 64))
-
-    global_operator = AdaptiveFNO(
-        in_timesteps=12, out_timesteps=6,
-        u_dim=2, width=16, depth=4,
-        x_modes=33, y_modes=33,
+    from legacy.datasets.pdebench import AutoRegressiveDiffReact2d
+    from torch.utils.data import DataLoader
+    dataset = AutoRegressiveDiffReact2d(
+        dataroot='data/2D/diffusion-reaction/2D_diff-react_NA_NA.h5',
+        window_size=10
     )
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    net = AutoRegressiveAdaptiveSpectralConv2d(t_dim=10, u_dim=2, x_modes=64, y_modes=64)
 
-    local_operator = AdaptiveFNO(
-        in_timesteps=12, out_timesteps=6,
-        u_dim=2, width=16, depth=2,
-        x_modes=33, y_modes=33,
-    )
-    
-    net = WindNet(global_operator, local_operator)
-    output: torch.Tensor = net(global_input, local_input)
-    print(output.shape)
-
-
-
-
-
+    x = next(iter(dataloader))[0]
+    y = net(x)
+    print(x.shape)
+    print(y.shape)
 

@@ -49,7 +49,7 @@ class Wind2dERA5(Dataset):
         self.to_float16: bool = to_float16
 
         if 24 % self.bundle_size != 0:
-            raise ValueError(f'The bundle_size must be a divisor of 24, got {self.bundle_size}')
+            raise ValueError(f'bundle_size must be a divisor of 24, got {self.bundle_size}')
 
         self.datafolder: str = f'{dataroot}/{pressure_level}'
         self.filenames: List[str] = sorted([
@@ -57,8 +57,10 @@ class Wind2dERA5(Dataset):
             if name.endswith('.grib')
             and self.from_date <= dt.datetime.strptime(name.replace('.grib',''), '%Y%m%d') <= self.to_date
         ])
-        self.timesteps: int = len(self.filenames) * 24
-        self.n_bundles: int = math.ceil(self.timesteps / self.bundle_size)
+        self.in_timesteps: int = self.bundle_size * self.window_size
+        self.out_timesteps: int = self.bundle_size
+        self.total_timesteps: int = len(self.filenames) * 24
+        self.n_bundles: int = math.ceil(self.total_timesteps / self.bundle_size)
         self.raw_indices: List[Tuple[int, int]] = [(t // 24, t % 24) for t in range(len(self.filenames) * 24)]
 
     def __getitem__(self, bundle_idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -129,12 +131,12 @@ class Wind2dERA5(Dataset):
         data: torch.Tensor = F.interpolate(
             input=data, size=self.resolution, mode='bicubic', align_corners=False,
         )
-        return data.permute(1, 0, 2, 3) # (timesteps, u_dim, latitude, longitude)
+        return data.permute(1, 0, 2, 3) # (timesteps, 2, latitude, longitude)
         
     def _compute_temporal_slices(self, bundle_idx: int) -> Tuple[slice, slice]:
         left_idx: int = bundle_idx * self.bundle_size
-        mid_idx: int = left_idx + self.window_size * self.bundle_size
-        right_idx: int = mid_idx + self.bundle_size
+        mid_idx: int = left_idx + self.in_timesteps
+        right_idx: int = mid_idx + self.out_timesteps
         input_slice = slice(left_idx, mid_idx, 1)
         output_slice = slice(mid_idx, right_idx, 1)
         return input_slice, output_slice
@@ -149,10 +151,11 @@ if __name__ == '__main__':
         local_latitude=(10, -10),
         local_longitude=(160, 200),
         from_date='20230101',
-        to_date='20230101',
+        to_date='20230102',
         bundle_size=6,
         window_size=2,
         resolution=(64, 64),
         to_float16=True,
     )
 
+    

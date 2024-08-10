@@ -8,7 +8,7 @@ from torch.optim import Adam
 from legacy.datasets.pdebench import MultiStepDiffReact2d
 from common.training import CheckpointLoader
 from legacy.workers import Predictor
-from models.arafno2d import AutoRegressiveAdaptiveFNO2d
+from legacy.models.arafno2d import AutoRegressiveAdaptiveFNO2d
 
 
 def main(config: Dict[str, Any]) -> None:

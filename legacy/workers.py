@@ -10,7 +10,7 @@ from common.training import Accumulator, EarlyStopping, Timer, Logger, Checkpoin
 from common.plotting import plot_predictions_2d
 from common.functional import compute_velocity_field
 
-from models.arafno2d import AutoRegressiveAdaptiveFNO2d
+from legacy.models.arafno2d import AutoRegressiveAdaptiveFNO2d
 from legacy.datasets.pdebench import AutoRegressiveDiffReact2d, MultiStepDiffReact2d
 from common.losses import RegularizedPowerError
 
