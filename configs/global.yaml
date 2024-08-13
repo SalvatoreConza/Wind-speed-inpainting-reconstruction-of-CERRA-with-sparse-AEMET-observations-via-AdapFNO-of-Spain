@@ -9,7 +9,7 @@ dataset:
   todate: '20240731'
   bundle_size: 6
   window_size: 1
-  resolution: [128, 128]  # [x_res, y_res] or null to keep the original resolution
+  resolution: [64, 64]  # [x_res, y_res] or null to keep the original resolution
   split: [0.8, 0.2]
 
 architecture:
@@ -30,7 +30,7 @@ training:
   patience: 5
   tolerance: 0.
   checkpoint_path: "./.checkpoints/global"
-  save_frequency: 1
+  save_frequency: 5
 
 
 

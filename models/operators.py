@@ -5,58 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.modules import (
-    AdaptiveSpectralConv2d, FeatureNormalization, 
+    AdaptiveSpectralConv2d, ContextAggregateLayer, FeatureNormalization, 
     LiftingLayer, LocalLinearTransformation, TemporalAggregateLayer,
 )
-
-
-class ContextAggregateLayer(nn.Module):
-
-    def __init__(
-        self,
-        out_x_res: int,
-        out_y_res: int,
-    ):
-        super().__init__()
-        self.out_x_res: int = out_x_res
-        self.out_y_res: int = out_y_res
-
-        self.weights = nn.Parameter(data=torch.randn(self.out_x_res, self.out_y_res))
-
-    def forward(self, global_context: torch.Tensor, local_context: torch.Tensor) -> torch.Tensor:
-        # (batch_size, timesteps, context_dim, x_res, y_res)
-        assert global_context.ndim == local_context.ndim == 5
-        assert global_context.shape[:3] == local_context.shape[:3]
-        batch_size, timesteps, context_dim = global_context.shape[:3]
-
-        # Interpolation to local resolution
-        global_context: torch.Tensor = ContextAggregateLayer._transform_resolution(
-            input=global_context, 
-            target_x_res=local_context.shape[3], target_y_res=local_context.shape[4]
-        )
-        assert global_context.shape == local_context.shape == (
-            batch_size, timesteps, context_dim, self.out_x_res, self.out_y_res,
-        )
-        # TODO: Improve
-        output: torch.Tensor = (
-            global_context * torch.sigmoid(self.weights) + local_context    # broadcasted
-        )
-        return output
-    
-    @staticmethod
-    def _transform_resolution(input: torch.Tensor, target_x_res: int, target_y_res: int) -> torch.Tensor:
-        output: torch.Tensor = input.reshape(
-            input.shape[0], input.shape[1] * input.shape[2], input.shape[3], input.shape[4],
-        )
-        output: torch.Tensor = F.interpolate(
-            input=output, 
-            size=(target_x_res, target_y_res), 
-            mode='bicubic',
-        )
-        output: torch.Tensor = output.reshape(
-            input.shape[0], input.shape[1], input.shape[2], target_x_res, target_y_res,
-        )
-        return output
 
 
 class _BaseOperator(nn.Module):
@@ -161,13 +112,13 @@ class LocalOperator(_BaseOperator):
         bundle_size: int, 
         window_size: int, 
         u_dim: int, 
-        depth: int, 
+        width: int, depth: int, 
         x_modes: int, y_modes: int,
         x_res: int, y_res: int,
     ):
         super().__init__(
             bundle_size=bundle_size, window_size=window_size, 
-            u_dim=u_dim, depth=depth, 
+            u_dim=u_dim, width=width, depth=depth, 
             x_modes=x_modes, y_modes=y_modes,
         )
         # NOTE: LocalOperator.width == GlobalOperator.width
@@ -187,11 +138,11 @@ class LocalOperator(_BaseOperator):
         y_res: int = input.shape[4]
         assert self.in_timesteps == input.shape[1]
         assert self.u_dim == input.shape[2]
-        width: int = global_context.shape[2]
+        assert self.width == global_context.shape[2], 'LocalOperator.width must be equal to GlobalOperator.width'
 
         # UpLifting
         lifted_input: torch.Tensor = self.P(input)
-        assert lifted_input.shape == (batch_size, self.in_timesteps, width, x_res, y_res)
+        assert lifted_input.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res)
 
         # Fourier Layers
         fourier_output: torch.Tensor = lifted_input
@@ -203,9 +154,9 @@ class LocalOperator(_BaseOperator):
             local_linear_tranformation = self.local_linear_transformations[i]
             out2: torch.Tensor = local_linear_tranformation(fourier_output)
             # Connection
-            assert out1.shape == out2.shape == (batch_size, self.in_timesteps, width, x_res, y_res), (
+            assert out1.shape == out2.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res), (
                 f'both out1 and out2 must have the same shape as '
-                f'(batch_size, self.in_timesteps, width, self.x_res, self.y_res), '
+                f'(batch_size, self.in_timesteps, self.width, self.x_res, self.y_res), '
                 f'got out1.shape = {out1.shape} and out2.shape = {out2.shape}'
             )
             fourier_output: torch.Tensor = out1 + out2
@@ -216,7 +167,7 @@ class LocalOperator(_BaseOperator):
             # Apply non-linearity
             fourier_output: torch.Tensor = F.gelu(fourier_output)
 
-        assert fourier_output.shape == (batch_size, self.in_timesteps, width, x_res, y_res)
+        assert fourier_output.shape == (batch_size, self.in_timesteps, self.width, x_res, y_res)
 
         # Condition on global context
         fourier_output: torch.Tensor = self.context_aggregate_layer(
@@ -224,7 +175,7 @@ class LocalOperator(_BaseOperator):
         )
         # Apply temporal weights
         weighted_fourier_output: torch.Tensor = self.Wt(fourier_output)
-        assert weighted_fourier_output.shape == (batch_size, self.out_timesteps, width, x_res, y_res)
+        assert weighted_fourier_output.shape == (batch_size, self.out_timesteps, self.width, x_res, y_res)
         # Projection
         projected_output: torch.Tensor = F.gelu(self.Q(weighted_fourier_output))
         assert projected_output.shape == (batch_size, self.out_timesteps, self.u_dim, x_res, y_res)
@@ -249,7 +200,8 @@ if __name__ == '__main__':
 
     local_operator = LocalOperator(
         bundle_size=6, window_size=1,
-        u_dim=2, depth=2,
+        u_dim=2, 
+        width=global_operator.width, depth=2,
         x_modes=33, y_modes=33,
         x_res=64, y_res=64,
     ).to(device)

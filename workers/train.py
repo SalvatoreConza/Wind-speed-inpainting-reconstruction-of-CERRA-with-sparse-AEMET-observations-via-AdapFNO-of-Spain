@@ -89,7 +89,7 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
             train_batch_size=train_batch_size, val_batch_size=val_batch_size,
             device=device,
         )
-        self.global_operator: GlobalOperator = global_operator.to(device)
+        self.global_operator: GlobalOperator = global_operator.to(device=self.device)
 
     def train(
         self, 
@@ -120,10 +120,10 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
                 assert batch_input.ndim == 5
                 batch_size, window_size, u_dim, x_res, y_res = batch_input.shape
                 batch_input: torch.Tensor = batch_input.to(device=self.device)
+                batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 batch_input: torch.Tensor = (
                     batch_input + torch.randn(size=batch_input.shape, device=self.device) * batch_input.std() * self.noise_level
                 )
-                batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 self.optimizer.zero_grad()
                 batch_prediction: torch.Tensor
                 _, batch_prediction = self.global_operator(input=batch_input)
@@ -253,8 +253,8 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
             train_batch_size=train_batch_size, val_batch_size=val_batch_size,
             device=device,
         )
-        self.local_operator: LocalOperator = local_operator.to(device)
-        self.global_operator: GlobalOperator = global_operator.to(device)
+        self.local_operator: LocalOperator = local_operator.to(device=self.device)
+        self.global_operator: GlobalOperator = global_operator.to(device=self.device)
 
     def train(
         self, 
@@ -288,16 +288,19 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
                 timer.start_batch(epoch, batch)
                 assert batch_local_input.ndim == 5
                 batch_size, window_size, u_dim, x_res, y_res = batch_local_input.shape
+                batch_global_input: torch.Tensor = batch_global_input.to(device=self.device)
                 batch_local_input: torch.Tensor = batch_local_input.to(device=self.device)
+                batch_local_groundtruth: torch.Tensor = batch_local_groundtruth.to(device=self.device)
                 batch_local_input: torch.Tensor = (
                     batch_local_input 
                     + torch.randn(size=batch_local_input.shape, device=self.device) * batch_local_input.std() * self.noise_level
                 )
-                batch_local_groundtruth: torch.Tensor = batch_local_groundtruth.to(device=self.device)
                 self.optimizer.zero_grad()
 
-                batch_global_context: torch.Tensor
-                batch_global_context, _ = self.global_operator(input=batch_global_input)
+                with torch.no_grad():
+                    batch_global_context: torch.Tensor
+                    batch_global_context, _ = self.global_operator(input=batch_global_input)
+
                 batch_prediction: torch.Tensor = self.local_operator(
                     input=batch_local_input, global_context=batch_global_context,
                 )
@@ -378,6 +381,7 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
             ) in enumerate(self.train_dataloader, start=1):
                 assert batch_local_input.ndim == 5
                 batch_size, window_size, u_dim, x_res, y_res = batch_local_input.shape
+                batch_global_input: torch.Tensor = batch_global_input.to(device=self.device)
                 batch_local_input: torch.Tensor = batch_local_input.to(device=self.device)
                 batch_local_groundtruth: torch.Tensor = batch_local_groundtruth.to(device=self.device)
 

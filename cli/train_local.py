@@ -86,7 +86,8 @@ def main(config: Dict[str, Any]) -> None:
         local_operator: LocalOperator = LocalOperator(
             bundle_size=global_operator.bundle_size,
             window_size=global_operator.window_size,
-            u_dim=u_dim, depth=depth,
+            u_dim=u_dim, 
+            width=global_operator.width, depth=depth,
             x_modes=x_modes, y_modes=y_modes,
             x_res=local_resolution[0], y_res=local_resolution[1],
         )

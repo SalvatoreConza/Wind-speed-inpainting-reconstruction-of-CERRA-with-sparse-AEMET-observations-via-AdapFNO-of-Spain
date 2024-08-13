@@ -1,6 +1,7 @@
 from typing import List, Tuple
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class FrequencyLinearTransformation(nn.Module):
@@ -208,6 +209,55 @@ class FeatureNormalization(nn.Module):
         inverse_permute_order: List[int] = [permute_order.index(i) for i in range(len(original_shape))]
         output: torch.Tensor = output.permute(*inverse_permute_order)
         assert output.shape == original_shape
+        return output
+
+
+class ContextAggregateLayer(nn.Module):
+
+    def __init__(
+        self,
+        out_x_res: int,
+        out_y_res: int,
+    ):
+        super().__init__()
+        self.out_x_res: int = out_x_res
+        self.out_y_res: int = out_y_res
+
+        self.weights = nn.Parameter(data=torch.randn(self.out_x_res, self.out_y_res))
+
+    def forward(self, global_context: torch.Tensor, local_context: torch.Tensor) -> torch.Tensor:
+        # (batch_size, timesteps, context_dim, x_res, y_res)
+        assert global_context.ndim == local_context.ndim == 5
+        assert global_context.shape[:3] == local_context.shape[:3]
+        batch_size, timesteps, context_dim = global_context.shape[:3]
+
+        # Interpolation to local resolution
+        global_context: torch.Tensor = ContextAggregateLayer._transform_resolution(
+            input=global_context,
+            target_x_res=local_context.shape[3], target_y_res=local_context.shape[4]
+        )
+        assert global_context.shape == local_context.shape == (
+            batch_size, timesteps, context_dim, self.out_x_res, self.out_y_res,
+        )
+        # TODO: Improve
+        output: torch.Tensor = (
+            global_context * torch.sigmoid(self.weights) + local_context    # broadcasted
+        )
+        return output
+
+    @staticmethod
+    def _transform_resolution(input: torch.Tensor, target_x_res: int, target_y_res: int) -> torch.Tensor:
+        output: torch.Tensor = input.reshape(
+            input.shape[0], input.shape[1] * input.shape[2], input.shape[3], input.shape[4],
+        )
+        output: torch.Tensor = F.interpolate(
+            input=output,
+            size=(target_x_res, target_y_res),
+            mode='bicubic',
+        )
+        output: torch.Tensor = output.reshape(
+            input.shape[0], input.shape[1], input.shape[2], target_x_res, target_y_res,
+        )
         return output
     
 
