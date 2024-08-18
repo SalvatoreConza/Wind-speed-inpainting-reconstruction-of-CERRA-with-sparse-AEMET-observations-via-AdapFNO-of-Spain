@@ -4,42 +4,47 @@ from typing import List, Tuple, Optional, Callable
 import datetime as dt
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
 
 
-def plot_2d(
-    batch_field: torch.Tensor,
-    reduction: Callable[[torch.Tensor], torch.Tensor] = None,
+def plot_groundtruths_2d(
+    groundtruths: torch.Tensor,
+    reduction: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    resolution: Tuple[int, int] | None = None,
 ) -> None:
     
-    assert batch_field.ndim == 5   # (batch_size, t_dim, u_dim, x_resolution, y_resolution)
-    assert batch_field.shape[1] == 1, 'Expect `t_dim` to be 1'
+    assert groundtruths.ndim == 4   # (timesteps, u_dim, x_resolution, y_resolution)
 
     if reduction is not None:
-        batch_field: torch.Tensor = reduction(batch_field)
+        groundtruths: torch.Tensor = reduction(groundtruths)
 
-    assert batch_field.shape[2] == 1, (
+    assert groundtruths.shape[1] == 1, (
         f'All physical fields must be aggregated to a single field for visualization, '
-        f'got batch_field.shape[2]={batch_field.shape[2]} and '
+        f'got groundtruths.shape[1]={groundtruths.shape[1]}'
     )
     # Prepare output directory and move tensor to CPU
-    destination_directory: str = './plots'
+    destination_directory: str = './plots/groundtruth'
     os.makedirs(destination_directory, exist_ok=True)
-    batch_field: torch.Tensor = batch_field.to(device=torch.device('cpu'))
+    groundtruths: torch.Tensor = groundtruths.to(device=torch.device('cpu'))
+
+    # Resize:
+    if resolution is not None:
+        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='bicubic')
 
     # Ensure that the plot respect the tensor's shape
-    x_res: int = batch_field.shape[3]
-    y_res: int = batch_field.shape[4]
+    x_res: int = groundtruths.shape[2]
+    y_res: int = groundtruths.shape[3]
     aspect_ratio: float = x_res / y_res
 
     # Set plot configuration
     cmap: str = 'gist_earth'
 
-    for idx in range(batch_field.shape[0]):
-        field: torch.Tensor = batch_field[idx]
+    for idx in range(groundtruths.shape[0]):
+        field: torch.Tensor = groundtruths[idx]
         figwidth: float = 10.
         fig, ax = plt.subplots(figsize=(figwidth, figwidth * aspect_ratio))
         ax.imshow(
-            field.squeeze(dim=(0, 1)).rot90(k=2).flip(dims=(1,)),
+            field.squeeze(dim=0).rot90(k=2).flip(dims=(1,)),
             origin="lower",
             vmin=field.min().item(), vmax=field.max().item(),
             cmap=cmap,
@@ -60,34 +65,40 @@ def plot_2d(
 def plot_predictions_2d(
     groundtruths: torch.Tensor,
     predictions: torch.Tensor,
-    notes: Optional[List[str]] = None,
-    reduction: Callable[[torch.Tensor], torch.Tensor] = None,
+    timestamps: List[str],
+    metrics_notes: List[str],
+    reduction: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    resolution: Tuple[int, int] | None = None,
 ) -> None:
 
     assert groundtruths.shape == predictions.shape
-    assert groundtruths.ndim == 5   # (batch_size, t_dim, u_dim, x_resolution, y_resolution)
-    assert groundtruths.shape[1] == 1, 'Expect `t_dim` to be 1'
+    assert groundtruths.ndim == 4   # (timesteps, u_dim, x_resolution, y_resolution)
     
     if reduction is not None:
         groundtruths: torch.Tensor = reduction(groundtruths)
         predictions: torch.Tensor = reduction(predictions)
 
-    assert groundtruths.shape[2] == predictions.shape[2] == 1, (
+    assert groundtruths.shape[1] == predictions.shape[1] == 1, (
         f'All physical fields must be aggregated to a single field for visualization, '
-        f'got predictions.shape[2]={predictions.shape[2]} and '
-        f'got groundtruths.shape[2]={groundtruths.shape[2]}'
+        f'got predictions.shape[1]={predictions.shape[1]} and '
+        f'got groundtruths.shape[1]={groundtruths.shape[1]}'
     )
-    assert notes is None or len(notes) == groundtruths.shape[0]
+    assert len(metrics_notes) == groundtruths.shape[0]
 
     # Prepare output directory and move tensor to CPU
-    destination_directory: str = './results'
+    destination_directory: str = './plots/prediction'
     os.makedirs(destination_directory, exist_ok=True)
     groundtruths = groundtruths.to(device=torch.device('cpu'))
     predictions = predictions.to(device=torch.device('cpu'))
 
+    # Resize:
+    if resolution is not None:
+        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='bicubic')
+        predictions: torch.Tensor = F.interpolate(input=predictions, size=resolution, mode='bicubic')
+
     # Ensure that the plot respect the tensor's shape
-    x_res: int = groundtruths.shape[3]
-    y_res: int = groundtruths.shape[4]
+    x_res: int = groundtruths.shape[2]
+    y_res: int = groundtruths.shape[3]
     aspect_ratio: float = x_res / y_res
 
     # Set plot configuration
@@ -95,33 +106,27 @@ def plot_predictions_2d(
     vmin = min(groundtruths.min().item(), predictions.min().item())
     vmax = max(groundtruths.max().item(), predictions.max().item())
 
-    for idx in range(predictions.shape[0]):
-        gt_field: torch.Tensor = groundtruths[idx]
-        pred_field: torch.Tensor = predictions[idx]
-        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    for t in range(predictions.shape[0]):
+        gt_field: torch.Tensor = groundtruths[t]
+        pred_field: torch.Tensor = predictions[t]
+        figwidth: float = 5.
+        fig, axs = plt.subplots(2, 1, figsize=(figwidth, 2 * figwidth * aspect_ratio))
         axs[0].imshow(
-            gt_field.squeeze(dim=(0, 1)).rot90(k=2).flip(dims=(1,)),
-            aspect=aspect_ratio, origin="lower",
-            extent=[-1., 1., -1., 1.],
+            gt_field.squeeze(dim=0).rot90(k=2).flip(dims=(1,)),
+            origin="lower",
             vmin=vmin, vmax=vmax,
             cmap=cmap,
         )
-        axs[0].set_title(f'$groundtruth$', fontsize=20)
+        axs[0].set_title(f'groundtruth - {timestamps[t]}', fontsize=12)
         axs[1].imshow(
-            pred_field.squeeze(dim=(0, 1)).rot90(k=2).flip(dims=(1,)),
-            aspect=aspect_ratio, origin="lower",
-            extent=[-1., 1., -1., 1.],
+            pred_field.squeeze(dim=0).rot90(k=2).flip(dims=(1,)),
+            origin="lower",
             vmin=vmin, vmax=vmax,
             cmap=cmap,
         )
-        axs[1].set_xticks([])
-        axs[1].set_yticks([])
-        if notes is None:
-            axs[1].set_title(f'$prediction$', fontsize=20)
-            fig.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.90, wspace=0.05)
-        else:
-            axs[1].set_title(f'$prediction$\n${notes[idx]}$', fontsize=20)
-            fig.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.85, wspace=0.05)
+        axs[1].set_title(f'prediction - {metrics_notes[t]}', fontsize=12)
+        fig.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.95, hspace=0.15)
+        
         timestamp: dt.datetime = dt.datetime.now()
         fig.savefig(
             f"{destination_directory}/{timestamp.strftime('%Y%m%d%H%M%S')}"
@@ -141,23 +146,25 @@ if __name__ == '__main__':
     dataset = Wind2dERA5(
         dataroot='data/2d/era5/wind',
         pressure_level=1000,
-        fromdate='20230701',
+        fromdate='20240725',
         todate='20240731',
-        global_latitude=(90, -90),
-        global_longitude=(0, 360),
-        global_resolution=(128, 256),
+        global_latitude=(23, 7),
+        global_longitude=(102, 118),
+        global_resolution=(128, 128),
         local_latitude=None,
         local_longitude=None,
         local_resolution=None,
-        bundle_size=1,
-        window_size=1,
+        bundle_size=1,  # bundle size must be 1
+        window_size=1,  # window size must be 1
     )
-    loader = DataLoader(dataset, batch_size=1000)
+    loader = DataLoader(dataset, batch_size=1000)   # only plot 1000 timesteps at max
     input, output = next(iter(loader))
+    input = input.squeeze(1)
+    output = output.squeeze(1)
     print(input.shape)
     print(output.shape)
 
-    plot_2d(batch_field=output, reduction=partial(compute_velocity_field, dim=2))
+    plot_groundtruths_2d(groundtruths=output, reduction=partial(compute_velocity_field, dim=1), resolution=(64, 64))
 
 
     

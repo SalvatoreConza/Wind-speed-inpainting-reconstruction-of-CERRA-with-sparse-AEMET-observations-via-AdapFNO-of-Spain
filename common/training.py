@@ -1,7 +1,7 @@
 import os
 import pathlib
 import time
-from typing import Optional, Dict, TextIO, Any, Tuple, NamedTuple
+from typing import List, Optional, Dict, TextIO, Any, Tuple, NamedTuple
 from collections import defaultdict
 import datetime as dt
 import copy

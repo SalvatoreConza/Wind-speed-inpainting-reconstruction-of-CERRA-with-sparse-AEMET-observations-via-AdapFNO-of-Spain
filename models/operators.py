@@ -6,9 +6,8 @@ import torch.nn.functional as F
 
 from models.modules import (
     AdaptiveSpectralConv2d, ContextAggregateLayer, FeatureNormalization, 
-    LiftingLayer, LocalLinearTransformation, TemporalAggregateLayer,
+    LiftingLayer, LocalLinearTransformation, TemporalAggregateLayer
 )
-
 
 class _BaseOperator(nn.Module):
 
@@ -43,17 +42,10 @@ class _BaseOperator(nn.Module):
         
         for _ in range(depth):
             self.spectral_convolutions.append(
-                AdaptiveSpectralConv2d(
-                    t_dim=self.in_timesteps, u_dim=self.width, 
-                    x_modes=self.x_modes, y_modes=self.y_modes
-                )
+                AdaptiveSpectralConv2d(u_dim=width, x_modes=x_modes, y_modes=y_modes)
             )
-            self.local_linear_transformations.append(
-                LocalLinearTransformation(t_dim=self.in_timesteps, u_dim=width)
-            )
-            self.feature_normalizations.append(
-                FeatureNormalization(normalized_shape=(self.in_timesteps, self.width), dims=(1, 2))
-            )
+            self.local_linear_transformations.append(LocalLinearTransformation(u_dim=width))
+            self.feature_normalizations.append(FeatureNormalization(normalized_shape=(self.width,), dims=(2,)))
 
 
 class GlobalOperator(_BaseOperator):
@@ -87,7 +79,7 @@ class GlobalOperator(_BaseOperator):
             )
             fourier_output: torch.Tensor = out1 + out2
 
-            # Normalize over temporal and width axes
+            # Normalize over the width axis
             feature_normalization = self.feature_normalizations[i]
             fourier_output: torch.Tensor = feature_normalization(fourier_output)
             # Apply non-linearity
@@ -100,7 +92,7 @@ class GlobalOperator(_BaseOperator):
         weighted_fourier_output: torch.Tensor = self.Wt(fourier_output)
         assert weighted_fourier_output.shape == (batch_size, self.out_timesteps, self.width, x_res, y_res)
         # Projection
-        projected_output: torch.Tensor = F.gelu(self.Q(weighted_fourier_output))
+        projected_output: torch.Tensor = self.Q(weighted_fourier_output)
         assert projected_output.shape == (batch_size, self.out_timesteps, self.u_dim, x_res, y_res)
         return global_context, projected_output
 
@@ -118,8 +110,8 @@ class LocalOperator(_BaseOperator):
     ):
         super().__init__(
             bundle_size=bundle_size, window_size=window_size, 
-            u_dim=u_dim, width=width, depth=depth, 
-            x_modes=x_modes, y_modes=y_modes,
+            u_dim=u_dim, x_modes=x_modes, y_modes=y_modes,
+            width=width, depth=depth, 
         )
         # NOTE: LocalOperator.width == GlobalOperator.width
         self.x_res: int = x_res
@@ -191,7 +183,7 @@ if __name__ == '__main__':
     global_operator = GlobalOperator(
         bundle_size=6, window_size=1,
         u_dim=2, width=16, depth=4,
-        x_modes=49, y_modes=49,
+        x_modes=12, y_modes=12,
     ).to(device)
 
     global_context, global_output = global_operator(input=global_input)

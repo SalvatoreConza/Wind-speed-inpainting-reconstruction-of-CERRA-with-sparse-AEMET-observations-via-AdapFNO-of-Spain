@@ -10,14 +10,13 @@ from torch.optim import Optimizer, Adam
 
 from models.operators import GlobalOperator, LocalOperator
 from era5.wind.datasets import Wind2dERA5
-
 from common.training import CheckpointLoader
 from workers.train import LocalOperatorTrainer
 
 
 def main(config: Dict[str, Any]) -> None:
     """
-    Main function to train Global Operator in WindNet model.
+    Main function to train Global Operator.
 
     Parameters:
         config (Dict[str, Any]): Configuration dictionary.
@@ -44,7 +43,6 @@ def main(config: Dict[str, Any]) -> None:
     x_modes: int                        = int(config['architecture']['x_modes'])
     y_modes: int                        = int(config['architecture']['y_modes'])
     
-    lambda_: float                      = float(config['training']['lambda'])
     noise_level: float                  = float(config['training']['noise_level'])
     train_batch_size: int               = int(config['training']['train_batch_size'])
     val_batch_size: int                 = int(config['training']['val_batch_size'])
@@ -52,7 +50,6 @@ def main(config: Dict[str, Any]) -> None:
     n_epochs: int                       = int(config['training']['n_epochs'])
     patience: int                       = int(config['training']['patience'])
     tolerance: int                      = float(config['training']['tolerance'])
-    checkpoint_path: Optional[str]      = config['training']['checkpoint_path']
     save_frequency: int                 = int(config['training']['save_frequency'])
 
     # Load global operator
@@ -60,7 +57,7 @@ def main(config: Dict[str, Any]) -> None:
     global_operator: GlobalOperator
     global_operator, _ = global_loader.load(scope=globals())
 
-    # Initialize the training datasets
+    # Instatiate the training datasets
     full_dataset = Wind2dERA5(
         dataroot=dataroot,
         pressure_level=pressure_level,
@@ -83,7 +80,7 @@ def main(config: Dict[str, Any]) -> None:
         local_operator: LocalOperator; local_optimizer: Optimizer
         local_operator, local_optimizer = local_loader.load(scope=globals())
     else:
-        local_operator: LocalOperator = LocalOperator(
+        local_operator = LocalOperator(
             bundle_size=global_operator.bundle_size,
             window_size=global_operator.window_size,
             u_dim=u_dim, 
@@ -98,7 +95,6 @@ def main(config: Dict[str, Any]) -> None:
         local_operator=local_operator,
         global_operator=global_operator, 
         optimizer=local_optimizer,
-        spectral_regularization_coef=lambda_,
         noise_level=noise_level,
         train_dataset=train_dataset, val_dataset=val_dataset,
         train_batch_size=train_batch_size, val_batch_size=val_batch_size,
@@ -106,7 +102,7 @@ def main(config: Dict[str, Any]) -> None:
     )
     trainer.train(
         n_epochs=n_epochs, patience=patience,
-        tolerance=tolerance, checkpoint_path=checkpoint_path,
+        tolerance=tolerance, checkpoint_path=f'.checkpoints/local/{pressure_level}',
         save_frequency=save_frequency,
     )
 

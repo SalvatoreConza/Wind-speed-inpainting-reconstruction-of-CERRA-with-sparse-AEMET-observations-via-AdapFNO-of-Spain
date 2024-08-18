@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV=neural_operator
-CONFIG="configs/global.yaml"
+CONFIG="configs/train_global.yaml"
 
 # Initialize conda in the current shell session
 eval "$(conda shell.bash hook)"

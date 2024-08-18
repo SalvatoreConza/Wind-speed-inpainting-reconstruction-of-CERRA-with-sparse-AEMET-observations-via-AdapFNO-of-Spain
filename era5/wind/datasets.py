@@ -1,9 +1,9 @@
 import os
 import math
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Dict, Literal
 import datetime as dt
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 import xarray as xr
 
@@ -58,6 +58,11 @@ class Wind2dERA5(Dataset):
             if name.endswith('.grib')
             and self.fromdate <= dt.datetime.strptime(name.replace('.grib',''), '%Y%m%d') <= self.todate
         ])
+        self.timestamps: List[dt.datetime] = [
+            dt.datetime.strptime(name.replace('.grib','') + str(h).zfill(2), '%Y%m%d%H') 
+            for name in self.filenames 
+                for h in range(24)
+        ]
         self.in_timesteps: int = self.bundle_size * self.window_size
         self.out_timesteps: int = self.bundle_size
         self.total_timesteps: int = len(self.filenames) * 24
@@ -69,14 +74,26 @@ class Wind2dERA5(Dataset):
         assert self.has_global or self.has_local, 'either global or local must be specified'
 
         if self.has_global:
-            self.global_tensors: List[torch.Tensor] = asyncio.run(
-                self._load_tensors(self.global_latitude, self.global_longitude, self.global_resolution)
-            )
+            self.global_tensors: List[torch.Tensor] = [
+                self._compute_tensor(
+                    filename=fname, 
+                    latitude=self.global_latitude, longitude=self.global_longitude, 
+                    resolution=global_resolution,
+                )
+                for fname in self.filenames
+            ]
+            assert len(self.global_tensors) == len(self.filenames)
 
         if self.has_local:
-            self.local_tensors: List[torch.Tensor] = asyncio.run(
-                self._load_tensors(self.local_latitude, self.local_longitude, self.local_resolution)
-            )
+            self.local_tensors: List[torch.Tensor] = [
+                self._compute_tensor(
+                    filename=fname, 
+                    latitude=self.local_latitude, longitude=self.local_longitude, 
+                    resolution=local_resolution,
+                )
+                for fname in self.filenames
+            ]
+            assert len(self.local_tensors) == len(self.filenames)
 
     def __getitem__(self, bundle_idx: int) -> Tuple[torch.Tensor, ...]:
         if bundle_idx >= len(self):
@@ -98,22 +115,12 @@ class Wind2dERA5(Dataset):
 
     def __len__(self) -> int:
         return self.n_bundles - self.window_size
-
-    async def _load_tensors(
-        self,
-        latitude: Tuple[float, float], 
-        longitude: Tuple[float, float],
-        resolution: Tuple[int, int],
-    ) -> List[torch.Tensor]:
-        loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
-        with ProcessPoolExecutor(max_workers=4) as pool:
-            tasks: List[asyncio.Future] = [
-                loop.run_in_executor(
-                    pool, self._compute_tensor, filename, latitude, longitude, resolution,
-                )
-                for filename in self.filenames
-            ]
-            return await asyncio.gather(*tasks)
+    
+    def compute_timestamp(self, bundle_idx: int) -> Tuple[List[dt.datetime], List[dt.datetime]]:
+        input_slice, output_slice = self._compute_temporal_slices(bundle_idx=bundle_idx)
+        in_timestamps: List[dt.datetime] = self.timestamps[input_slice]
+        out_timestamps: List[dt.datetime] = self.timestamps[output_slice]
+        return in_timestamps, out_timestamps
 
     def _compute_tensor(
         self, 
@@ -149,10 +156,11 @@ class Wind2dERA5(Dataset):
 
 
 if __name__ == '__main__':
+
     dataset = Wind2dERA5(
         dataroot='data/2d/era5/wind',
         pressure_level=1000,
-        fromdate='20230101',
+        fromdate='20240701',
         todate='20240731',
         bundle_size=6,
         window_size=2,
