@@ -103,8 +103,8 @@ def plot_predictions_2d(
 
     # Set plot configuration
     cmap: str = 'gist_earth'
-    vmin = min(groundtruths.min().item(), predictions.min().item())
-    vmax = max(groundtruths.max().item(), predictions.max().item())
+    vmin: float = min(groundtruths.min().item(), predictions.min().item())
+    vmax: float = max(groundtruths.max().item(), predictions.max().item())
 
     for t in range(predictions.shape[0]):
         gt_field: torch.Tensor = groundtruths[t]

@@ -8,7 +8,7 @@ from torch.optim import Adam
 from models.operators import GlobalOperator
 from era5.wind.datasets import Wind2dERA5
 from common.training import CheckpointLoader
-from workers.inference import GlobalOperatorPredictor
+from workers.predictor import GlobalOperatorPredictor
 
 
 def main(config: Dict[str, Any]) -> None:
@@ -31,11 +31,11 @@ def main(config: Dict[str, Any]) -> None:
     bundle_size: int                    = int(config['dataset']['bundle_size'])
     window_size: int                    = int(config['dataset']['window_size'])
 
-    global_checkpoint: str              = str(config['architecture']['global_checkpoint'])
-    plot_resolution: Optional[List[int, int]] = config['plotting']['plot_resolution']
+    from_checkpoint: str                = str(config['global_architecture']['from_checkpoint'])
+    plot_resolution: Optional[List[int, int]] = config['global_plotting']['plot_resolution']
 
     # Initialize the global operator from global checkpoint
-    global_loader = CheckpointLoader(checkpoint_path=global_checkpoint)
+    global_loader = CheckpointLoader(checkpoint_path=from_checkpoint)
     global_operator: GlobalOperator
     global_operator, _ = global_loader.load(scope=globals())
 
@@ -61,15 +61,12 @@ def main(config: Dict[str, Any]) -> None:
         window_size=window_size,
     )
 
-    if plot_resolution is None:
-        global_predictor.predict(dataset=dataset, resolution=None)
-    else:
-        global_predictor.predict(dataset=dataset, resolution=tuple(plot_resolution))
+    global_predictor.predict(dataset=dataset, plot_resolution=plot_resolution)
 
 if __name__ == '__main__':
 
     # Initialize the argument parser
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description='Inference the Global Operator')
+    parser = argparse.ArgumentParser(description='Inference the Global Operator')
     parser.add_argument('--config', type=str, required=True, help='Configuration file name.')
 
     args: argparse.Namespace = parser.parse_args()

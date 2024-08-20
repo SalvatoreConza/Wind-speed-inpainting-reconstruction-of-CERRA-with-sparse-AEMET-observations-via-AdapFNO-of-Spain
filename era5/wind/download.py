@@ -1,4 +1,5 @@
 import os
+from typing import Dict, Any
 import datetime as dt
 
 import cdsapi
@@ -27,7 +28,7 @@ class WindByPressureLevels:
         day: str = str(day).zfill(2)
         filename: str = f'{year}{month}{day}.grib'
         
-        request = {
+        request: Dict[str, Any] = {
             'product_type': ['reanalysis'],
             'variable': ['u_component_of_wind', 'v_component_of_wind'],
             'year': [year],
@@ -89,7 +90,7 @@ class GeoPotential:
         day: str = str(day).zfill(2)
         filename: str = f'{year}{month}{day}.grib'
         
-        request = {
+        request: Dict[str, Any] = {
             'product_type': ['reanalysis'],
             'variable': ['geopotential'],
             'year': [year],

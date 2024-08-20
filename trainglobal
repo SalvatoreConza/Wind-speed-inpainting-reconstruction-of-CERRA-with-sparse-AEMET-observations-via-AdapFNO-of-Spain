@@ -1,18 +1,7 @@
 #!/bin/bash
 
-ENV=neural_operator
-CONFIG="configs/train_global.yaml"
-
-# Initialize conda in the current shell session
-eval "$(conda shell.bash hook)"
-
-if [[ "$CONDA_DEFAULT_ENV" != "$ENV" ]]; then
-    echo "Activating environment..."
-    conda activate $ENV
-    echo "Activated $ENV"
-fi
+CONFIG="configs/train.yaml"
 
 echo "Start Training..."
 python cli/train_global.py --config="$CONFIG"
-
 

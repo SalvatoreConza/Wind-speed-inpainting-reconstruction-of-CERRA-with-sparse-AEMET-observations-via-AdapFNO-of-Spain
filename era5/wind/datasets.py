@@ -102,13 +102,13 @@ class Wind2dERA5(Dataset):
         input_slice, output_slice = self._compute_temporal_slices(bundle_idx=bundle_idx)
         sample: Tuple[torch.Tensor, ...] = tuple()  # (global_input, global_output, local_input, local_output) 
         if self.has_global:
-            global_input = self._stack_tensors(tensors=self.global_tensors, time_slice=input_slice)
-            global_output = self._stack_tensors(tensors=self.global_tensors, time_slice=output_slice)
+            global_input: torch.Tensor = self._stack_tensors(tensors=self.global_tensors, time_slice=input_slice)
+            global_output: torch.Tensor = self._stack_tensors(tensors=self.global_tensors, time_slice=output_slice)
             sample += (global_input, global_output)
 
         if self.has_local:
-            local_input = self._stack_tensors(tensors=self.local_tensors, time_slice=input_slice)
-            local_output = self._stack_tensors(tensors=self.local_tensors, time_slice=output_slice)
+            local_input: torch.Tensor = self._stack_tensors(tensors=self.local_tensors, time_slice=input_slice)
+            local_output: torch.Tensor = self._stack_tensors(tensors=self.local_tensors, time_slice=output_slice)
             sample += (local_input, local_output)
 
         return sample   
@@ -130,14 +130,14 @@ class Wind2dERA5(Dataset):
         resolution: Tuple[int, int],
     ) -> torch.Tensor:
         dataset: xr.Dataset = xr.open_dataset(f'{self.datafolder}/{filename}', engine='cfgrib')
-        dataset: xr.Dataset = dataset.sel(
+        dataset = dataset.sel(
             latitude=slice(*latitude), longitude=slice(*longitude)
         )
         data: torch.Tensor = torch.tensor(data=dataset.to_dataarray().values)
         # Convert to shape (timesteps, 2, *resolution)
-        data: torch.Tensor = data.permute(1, 0, 2, 3)
+        data = data.permute(1, 0, 2, 3)
         # Transform resolution
-        data: torch.Tensor = F.interpolate(
+        data = F.interpolate(
             input=data, size=resolution, mode='bicubic',
         )
         return data

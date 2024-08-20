@@ -11,7 +11,7 @@ from torch.optim import Optimizer, Adam
 from models.operators import GlobalOperator, LocalOperator
 from era5.wind.datasets import Wind2dERA5
 from common.training import CheckpointLoader
-from workers.train import LocalOperatorTrainer
+from workers.trainer import LocalOperatorTrainer
 
 
 def main(config: Dict[str, Any]) -> None:
@@ -26,31 +26,31 @@ def main(config: Dict[str, Any]) -> None:
     device: torch.device                = torch.device(config['device'])
     dataroot: str                       = str(config['dataset']['root'])
     pressure_level: str                 = int(config['dataset']['pressure_level'])
-    fromdate: str                       = str(config['dataset']['fromdate'])
-    todate: str                         = str(config['dataset']['todate'])
     global_latitude: Tuple[float, float] = tuple(config['dataset']['global_latitude'])
     global_longitude: Tuple[float, float] = tuple(config['dataset']['global_longitude'])
     global_resolution: Tuple[int, int]  = tuple(config['dataset']['global_resolution'])
     local_latitude: Tuple[float, float] = tuple(config['dataset']['local_latitude'])
     local_longitude: Tuple[float, float] = tuple(config['dataset']['local_longitude'])
     local_resolution: Tuple[int, int]   = tuple(config['dataset']['local_resolution'])
+    fromdate: str                       = str(config['dataset']['fromdate'])
+    todate: str                         = str(config['dataset']['todate'])
     split: Tuple[float, float]          = tuple(config['dataset']['split'])
 
-    local_checkpoint: Optional[str]     = config['architecture']['local_checkpoint']
-    global_checkpoint: str              = str(config['architecture']['global_checkpoint'])
-    u_dim: int                          = int(config['architecture']['u_dim'])
-    depth: int                          = int(config['architecture']['depth'])
-    x_modes: int                        = int(config['architecture']['x_modes'])
-    y_modes: int                        = int(config['architecture']['y_modes'])
+    from_checkpoint: Optional[str]      = config['local_architecture']['from_checkpoint']
+    global_checkpoint: str              = str(config['local_architecture']['global_checkpoint'])
+    u_dim: int                          = int(config['global_architecture']['u_dim'])
+    depth: int                          = int(config['global_architecture']['depth'])
+    x_modes: int                        = int(config['local_architecture']['x_modes'])
+    y_modes: int                        = int(config['local_architecture']['y_modes'])
     
-    noise_level: float                  = float(config['training']['noise_level'])
-    train_batch_size: int               = int(config['training']['train_batch_size'])
-    val_batch_size: int                 = int(config['training']['val_batch_size'])
-    learning_rate: float                = float(config['training']['learning_rate'])
-    n_epochs: int                       = int(config['training']['n_epochs'])
-    patience: int                       = int(config['training']['patience'])
-    tolerance: int                      = float(config['training']['tolerance'])
-    save_frequency: int                 = int(config['training']['save_frequency'])
+    noise_level: float                  = float(config['local_training']['noise_level'])
+    train_batch_size: int               = int(config['local_training']['train_batch_size'])
+    val_batch_size: int                 = int(config['local_training']['val_batch_size'])
+    learning_rate: float                = float(config['local_training']['learning_rate'])
+    n_epochs: int                       = int(config['local_training']['n_epochs'])
+    patience: int                       = int(config['local_training']['patience'])
+    tolerance: int                      = float(config['local_training']['tolerance'])
+    save_frequency: int                 = int(config['local_training']['save_frequency'])
 
     # Load global operator
     global_loader = CheckpointLoader(checkpoint_path=global_checkpoint)
@@ -75,8 +75,8 @@ def main(config: Dict[str, Any]) -> None:
     train_dataset, val_dataset = random_split(dataset=full_dataset, lengths=split)
 
     # Load local operator
-    if local_checkpoint is not None:
-        local_loader = CheckpointLoader(checkpoint_path=local_checkpoint)
+    if from_checkpoint is not None:
+        local_loader = CheckpointLoader(checkpoint_path=from_checkpoint)
         local_operator: LocalOperator; local_optimizer: Optimizer
         local_operator, local_optimizer = local_loader.load(scope=globals())
     else:
@@ -88,7 +88,7 @@ def main(config: Dict[str, Any]) -> None:
             x_modes=x_modes, y_modes=y_modes,
             x_res=local_resolution[0], y_res=local_resolution[1],
         )
-        local_optimizer: Optimizer = Adam(params=local_operator.parameters(), lr=learning_rate)
+        local_optimizer = Adam(params=local_operator.parameters(), lr=learning_rate)
     
     # Load local trainer
     trainer = LocalOperatorTrainer(
@@ -110,7 +110,7 @@ def main(config: Dict[str, Any]) -> None:
 if __name__ == "__main__":
 
     # Initialize the argument parser
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description='Train the Local Operator')
+    parser = argparse.ArgumentParser(description='Train the Local Operator')
     parser.add_argument('--config', type=str, required=True, help='Configuration file name.')
 
     args: argparse.Namespace = parser.parse_args()

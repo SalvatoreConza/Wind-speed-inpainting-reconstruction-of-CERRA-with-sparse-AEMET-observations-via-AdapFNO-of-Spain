@@ -1,7 +1,9 @@
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 
 import torch
 import torch.nn as nn
+from torchvision.models import vgg16, VGG16_Weights
+from common.functional import compute_velocity_field
 
 
 class RegularizedPowerError(nn.Module):
@@ -25,4 +27,36 @@ class RegularizedPowerError(nn.Module):
             tensors=spectral_weights, dim=0
         ).abs().mean()
         return scaled_error, power_error, weight_magnitude, power_error + self.lambda_ * weight_magnitude
+
+
+class VGG16Loss(nn.Module):
+
+    def __init__(self, reduction: Literal['sum', 'mean']):
+        super().__init__()
+        self.reduction: str = reduction
+        self.feature_extractor: nn.Module = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features
+        self.feature_extractor.eval()
+        
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+            
+        self.loss_function: nn.Module = nn.MSELoss(reduction='sum')
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        assert input.ndim == target.ndim == 5
+        assert input.shape == target.shape
+        batch_size, timesteps, u_dim, x_res, y_res = input.shape
+        input = compute_velocity_field(input=input, dim=2)
+        target = compute_velocity_field(input=target, dim=2)
+        input = input.reshape(batch_size * timesteps, 1, x_res, y_res)
+        target = target.reshape(batch_size * timesteps, 1, x_res, y_res)
+        input = input.expand(batch_size * timesteps, 3, x_res, y_res)
+        target = target.expand(batch_size * timesteps, 3, x_res, y_res)
+        prediction_features: torch.Tensor = self.feature_extractor(input=input)
+        groundtruth_features: torch.Tensor = self.feature_extractor(input=target)
+        total_loss: torch.Tensor = self.loss_function(input=prediction_features, target=groundtruth_features)
+        if self.reduction == 'sum':
+            return total_loss
+        else:
+            return total_loss / batch_size
 

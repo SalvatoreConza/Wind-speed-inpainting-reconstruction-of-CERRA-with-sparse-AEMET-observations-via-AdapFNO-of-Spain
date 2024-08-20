@@ -11,7 +11,7 @@ from torch.optim import Optimizer, Adam
 from models.operators import GlobalOperator
 from era5.wind.datasets import Wind2dERA5
 from common.training import CheckpointLoader
-from workers.train import GlobalOperatorTrainer
+from workers.trainer import GlobalOperatorTrainer
 
 
 def main(config: Dict[str, Any]) -> None:
@@ -35,21 +35,21 @@ def main(config: Dict[str, Any]) -> None:
     window_size: int                    = int(config['dataset']['window_size'])
     split: Tuple[float, float]          = tuple(config['dataset']['split'])
 
-    u_dim: int                          = int(config['architecture']['u_dim'])
-    width: int                          = int(config['architecture']['width'])
-    depth: int                          = int(config['architecture']['depth'])
-    x_modes: int                        = int(config['architecture']['x_modes'])
-    y_modes: int                        = int(config['architecture']['y_modes'])
-    global_checkpoint: Optional[str]      = config['architecture']['global_checkpoint']
+    u_dim: int                          = int(config['global_architecture']['u_dim'])
+    width: int                          = int(config['global_architecture']['width'])
+    depth: int                          = int(config['global_architecture']['depth'])
+    x_modes: int                        = int(config['global_architecture']['x_modes'])
+    y_modes: int                        = int(config['global_architecture']['y_modes'])
+    from_checkpoint: Optional[str]      = config['architecture']['from_checkpoint']
     
-    noise_level: float                  = float(config['training']['noise_level'])
-    train_batch_size: int               = int(config['training']['train_batch_size'])
-    val_batch_size: int                 = int(config['training']['val_batch_size'])
-    learning_rate: float                = float(config['training']['learning_rate'])
-    n_epochs: int                       = int(config['training']['n_epochs'])
-    patience: int                       = int(config['training']['patience'])
-    tolerance: int                      = float(config['training']['tolerance'])
-    save_frequency: int                 = int(config['training']['save_frequency'])
+    noise_level: float                  = float(config['global_training']['noise_level'])
+    train_batch_size: int               = int(config['global_training']['train_batch_size'])
+    val_batch_size: int                 = int(config['global_training']['val_batch_size'])
+    learning_rate: float                = float(config['global_training']['learning_rate'])
+    n_epochs: int                       = int(config['global_training']['n_epochs'])
+    patience: int                       = int(config['global_training']['patience'])
+    tolerance: int                      = float(config['global_training']['tolerance'])
+    save_frequency: int                 = int(config['global_training']['save_frequency'])
 
     # Instatiate the training datasets
     full_dataset = Wind2dERA5(
@@ -69,19 +69,19 @@ def main(config: Dict[str, Any]) -> None:
     train_dataset, val_dataset = random_split(dataset=full_dataset, lengths=split)
 
     # Load global operator
-    if global_checkpoint is not None:
-        checkpoint_loader = CheckpointLoader(checkpoint_path=global_checkpoint + f'/{pressure_level}')
-        operator: nn.Module; optimizer: Optimizer
+    if from_checkpoint is not None:
+        checkpoint_loader = CheckpointLoader(checkpoint_path=from_checkpoint + f'/{pressure_level}')
+        operator: GlobalOperator; optimizer: Optimizer
         operator, optimizer = checkpoint_loader.load(scope=globals())
     else:
-        operator: GlobalOperator = GlobalOperator(
+        operator = GlobalOperator(
             bundle_size=full_dataset.bundle_size,
             window_size=full_dataset.window_size,
             u_dim=u_dim, 
             width=width, depth=depth,
             x_modes=x_modes, y_modes=y_modes,
         )
-        optimizer: Optimizer = Adam(params=operator.parameters(), lr=learning_rate)
+        optimizer = Adam(params=operator.parameters(), lr=learning_rate)
 
     # Load global trainer    
     trainer = GlobalOperatorTrainer(
@@ -101,7 +101,7 @@ def main(config: Dict[str, Any]) -> None:
 if __name__ == "__main__":
 
     # Initialize the argument parser
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description='Train the Global Operator')
+    parser = argparse.ArgumentParser(description='Train the Global Operator')
     parser.add_argument('--config', type=str, required=True, help='Configuration file name.')
 
     args: argparse.Namespace = parser.parse_args()

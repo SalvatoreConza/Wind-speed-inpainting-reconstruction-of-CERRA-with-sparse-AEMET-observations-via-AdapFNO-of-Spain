@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 
 from common.training import Accumulator, EarlyStopping, Timer, Logger, CheckpointSaver
-from common.losses import RegularizedPowerError
+from common.losses import VGG16Loss
 
 from models.operators import GlobalOperator, LocalOperator
 from era5.wind.datasets import Wind2dERA5
@@ -44,8 +44,9 @@ class _BaseOperatorTrainer(ABC):
             batch_size=val_batch_size, 
             shuffle=False,
         )
-        self.loss_function: nn.Module = nn.MSELoss(reduction='sum')
-    
+        self.loss_function: nn.Module = nn.MSELoss(reduction='sum').to(self.device)
+        # self.loss_function: nn.Module = VGG16Loss(reduction='sum').to(self.device)
+
     @abstractmethod
     def train(
         self, 
@@ -121,7 +122,7 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
                     torch.randn_like(input=batch_input, device=self.device) * batch_input.std() * self.noise_level
                 )
                 batch_prediction: torch.Tensor
-                _, batch_prediction = self.global_operator(input=batch_input)
+                batch_prediction, *_ = self.global_operator(input=batch_input)
                 # Compute loss
                 total_mse_loss: torch.Tensor = self.loss_function(input=batch_prediction, target=batch_groundtruth)
                 mean_mse_loss: torch.Tensor = total_mse_loss / batch_prediction.numel()
@@ -189,7 +190,7 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
                 batch_groundtruth: torch.Tensor = batch_groundtruth.to(device=self.device)
                 # Forward propagation
                 batch_prediction: torch.Tensor
-                _, batch_prediction = self.global_operator(input=batch_input)
+                batch_prediction, *_ = self.global_operator(input=batch_input)
                 # Compute loss
                 total_mse_loss: torch.Tensor = self.loss_function(input=batch_prediction, target=batch_groundtruth)
                 # Accumulate the val_metrics
@@ -268,11 +269,11 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
                     torch.randn_like(input=batch_local_input, device=self.device) * batch_local_input.std() * self.noise_level
                 )
                 with torch.no_grad():
-                    batch_global_context: torch.Tensor
-                    batch_global_context, _ = self.global_operator(input=batch_global_input)
+                    batch_global_contexts: Tuple[torch.Tensor, ...]
+                    _, *batch_global_contexts = self.global_operator(input=batch_global_input)
 
                 batch_local_prediction: torch.Tensor = self.local_operator(
-                    input=batch_local_input, global_context=batch_global_context,
+                    input=batch_local_input, global_contexts=list(batch_global_contexts),
                 )
                 # Compute loss
                 total_mse_loss: torch.Tensor = self.loss_function(input=batch_local_prediction, target=batch_local_groundtruth)
@@ -323,17 +324,18 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
         # Always save last checkpoint
         if checkpoint_path:
             checkpoint_saver.save(
-                model_states=self.global_operator.state_dict(), 
+                model_states=self.local_operator.state_dict(), 
                 optimizer_states=self.optimizer.state_dict(),
                 filename=f'epoch{epoch}.pt',
             )
 
     def evaluate(self) -> Tuple[float, float]:
         val_metrics = Accumulator()
+        self.global_operator.eval()
         self.local_operator.eval()
         with torch.no_grad():
             # Loop through each batch
-            for batch_global_input, _, batch_local_input, batch_local_groundtruth in self.train_dataloader:
+            for batch_global_input, _, batch_local_input, batch_local_groundtruth in self.val_dataloader:
                 assert batch_local_input.ndim == 5
                 batch_size, window_size, u_dim, x_res, y_res = batch_local_input.shape
                 # Move to selected device
@@ -341,10 +343,10 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
                 batch_local_input: torch.Tensor = batch_local_input.to(device=self.device)
                 batch_local_groundtruth: torch.Tensor = batch_local_groundtruth.to(device=self.device)
                 # Forward propagation
-                batch_global_context: torch.Tensor
-                batch_global_context, _ = self.global_operator(input=batch_global_input)
+                batch_global_contexts: Tuple[torch.Tensor, ...]
+                _, *batch_global_contexts = self.global_operator(input=batch_global_input)
                 batch_local_prediction: torch.Tensor = self.local_operator(
-                    input=batch_local_input, global_context=batch_global_context,
+                    input=batch_local_input, global_contexts=batch_global_contexts,
                 )
                 # Compute loss
                 total_mse_loss: torch.Tensor = self.loss_function(
