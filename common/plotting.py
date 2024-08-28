@@ -144,7 +144,7 @@ if __name__ == '__main__':
     from common.functional import compute_velocity_field
     
     dataset = Wind2dERA5(
-        dataroot='data/2d/era5/wind',
+        dataroot='data/era5',
         pressure_level=1000,
         fromdate='20240725',
         todate='20240731',

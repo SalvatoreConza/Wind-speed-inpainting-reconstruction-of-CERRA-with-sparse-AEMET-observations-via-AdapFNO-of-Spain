@@ -1,7 +1,7 @@
 device: cuda
 
 dataset:
-  root: "data/2d/era5/wind"
+  root: "data/era5"
   pressure_level: 1000
   global_latitude: [45, -45]   # (a, b) in the range [90.0, 89.75, 89.5, ..., -89.5, -89.75, -90.0]
   global_longitude: [60, 150]   # (a, b) in the range [0.0, 0.25, 0.5, ..., 359.25, 359.5, 359.75]

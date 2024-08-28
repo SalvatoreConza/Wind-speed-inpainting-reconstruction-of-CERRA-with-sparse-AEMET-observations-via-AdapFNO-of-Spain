@@ -157,7 +157,7 @@ class Wind2dERA5(Dataset):
 if __name__ == '__main__':
 
     dataset = Wind2dERA5(
-        dataroot='data/2d/era5/wind',
+        dataroot='data/era5',
         pressure_level=1000,
         fromdate='20170101',
         todate='20171231',
