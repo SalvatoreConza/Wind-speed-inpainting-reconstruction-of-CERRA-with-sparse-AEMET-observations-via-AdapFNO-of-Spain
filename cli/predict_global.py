@@ -6,7 +6,7 @@ import torch
 from torch.optim import Adam
 
 from models.operators import GlobalOperator
-from era5.datasets import Wind2dERA5, ERA5_6Hour
+from era5.datasets import ERA5_6Hour
 from common.training import CheckpointLoader
 from workers.predictor import GlobalOperatorPredictor
 
@@ -56,7 +56,6 @@ def main(config: Dict[str, Any]) -> None:
         local_longitude=None,
         indays=indays,
         outdays=outdays,
-        device=device,
     )
 
     global_predictor.predict(dataset=dataset, plot_resolution=plot_resolution)

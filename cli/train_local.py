@@ -69,7 +69,6 @@ def main(config: Dict[str, Any]) -> None:
         local_longitude=local_longitude,
         indays=indays,
         outdays=outdays,
-        device=device,
     )
     val_dataset = ERA5_6Hour(
         dataroot=dataroot,
@@ -82,7 +81,6 @@ def main(config: Dict[str, Any]) -> None:
         local_longitude=local_longitude,
         indays=indays,
         outdays=outdays,
-        device=device,
     )
 
     # Load local operator
@@ -93,9 +91,10 @@ def main(config: Dict[str, Any]) -> None:
     else:
         local_operator = LocalOperator(
             in_channels=global_operator.in_channels, 
+            out_channels=global_operator.out_channels,
             embedding_dim=global_operator.embedding_dim,
-            in_timesteps=train_dataset.in_timesteps, 
-            out_timesteps=train_dataset.out_timesteps,
+            in_timesteps=global_operator.in_timesteps, 
+            out_timesteps=global_operator.out_timesteps,
             n_layers=global_operator.n_layers,
             spatial_resolution=train_dataset.local_resolution,
             block_size=block_size, 

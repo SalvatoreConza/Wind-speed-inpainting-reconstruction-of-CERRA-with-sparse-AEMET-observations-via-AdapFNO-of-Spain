@@ -9,10 +9,9 @@ from torch.optim import Optimizer
 
 
 from common.training import Accumulator, EarlyStopping, Timer, Logger, CheckpointSaver
-from common.losses import VGG16Loss
 
 from models.operators import GlobalOperator, LocalOperator
-from era5.datasets import Wind2dERA5
+from era5.datasets import ERA5_6Hour
 
 
 class _BaseOperatorTrainer(ABC):
@@ -21,16 +20,16 @@ class _BaseOperatorTrainer(ABC):
         self, 
         optimizer: Optimizer,
         noise_level: float,
-        train_dataset: Wind2dERA5,
-        val_dataset: Wind2dERA5,
+        train_dataset: ERA5_6Hour,
+        val_dataset: ERA5_6Hour,
         train_batch_size: int,
         val_batch_size: int,
         device: torch.device,
     ):
         self.optimizer: Optimizer = optimizer
         self.noise_level: float = noise_level
-        self.train_dataset: Wind2dERA5 = train_dataset
-        self.val_dataset: Wind2dERA5 = val_dataset
+        self.train_dataset: ERA5_6Hour = train_dataset
+        self.val_dataset: ERA5_6Hour = val_dataset
         self.train_batch_size: int = train_batch_size
         self.val_batch_size: int = val_batch_size
         self.device: torch.device = device
@@ -39,11 +38,17 @@ class _BaseOperatorTrainer(ABC):
             dataset=train_dataset, 
             batch_size=train_batch_size, 
             shuffle=True,
+            num_workers=4,
+            prefetch_factor=3,
+            pin_memory=True,
         )
         self.val_dataloader = DataLoader(
             dataset=val_dataset, 
             batch_size=val_batch_size, 
             shuffle=False,
+            num_workers=4,
+            prefetch_factor=3,
+            pin_memory=True,
         )
         self.loss_function: nn.Module = nn.MSELoss(reduction='sum').to(self.device)
 
@@ -70,8 +75,8 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
         global_operator: GlobalOperator,
         optimizer: Optimizer,
         noise_level: float,
-        train_dataset: Wind2dERA5,
-        val_dataset: Wind2dERA5,
+        train_dataset: ERA5_6Hour,
+        val_dataset: ERA5_6Hour,
         train_batch_size: int,
         val_batch_size: int,
         device: torch.device,
@@ -200,6 +205,7 @@ class GlobalOperatorTrainer(_BaseOperatorTrainer):
                 total_mse_loss: torch.Tensor = self.loss_function(input=batch_prediction, target=batch_groundtruth)
                 # Accumulate the val_metrics
                 val_metrics.add(total_mse=total_mse_loss.item(), n_elems=batch_prediction.numel())
+                print('Evaluated 1 batch')
 
         # Compute the aggregate metrics
         val_mse: float = val_metrics['total_mse'] / val_metrics['n_elems']
@@ -216,8 +222,8 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
         global_operator: GlobalOperator,
         optimizer: Optimizer,
         noise_level: float,
-        train_dataset: Wind2dERA5,
-        val_dataset: Wind2dERA5,
+        train_dataset: ERA5_6Hour,
+        val_dataset: ERA5_6Hour,
         train_batch_size: int,
         val_batch_size: int,
         device: torch.device,

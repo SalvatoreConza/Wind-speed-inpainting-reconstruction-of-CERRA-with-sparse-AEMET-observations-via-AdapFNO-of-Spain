@@ -9,7 +9,7 @@ from torch.utils.data import random_split
 from torch.optim import Optimizer, Adam
 
 from models.operators import GlobalOperator
-from era5.datasets import Wind2dERA5, ERA5_6Hour
+from era5.datasets import ERA5_6Hour
 from common.training import CheckpointLoader
 from workers.trainer import GlobalOperatorTrainer
 
@@ -35,7 +35,6 @@ def main(config: Dict[str, Any]) -> None:
     indays: int                         = int(config['dataset']['indays'])
     outdays: int                        = int(config['dataset']['outdays'])
 
-    in_channels: int                    = int(config['global_architecture']['in_channels'])
     embedding_dim: int                  = int(config['global_architecture']['embedding_dim'])
     n_layers: int                       = int(config['global_architecture']['n_layers'])
     block_size: int                     = int(config['global_architecture']['block_size'])
@@ -64,7 +63,6 @@ def main(config: Dict[str, Any]) -> None:
         local_longitude=None,
         indays=indays,
         outdays=outdays,
-        device=device,
     )
     val_dataset = ERA5_6Hour(
         dataroot=dataroot,
@@ -77,7 +75,6 @@ def main(config: Dict[str, Any]) -> None:
         local_longitude=None,
         indays=indays,
         outdays=outdays,
-        device=device,
     )
 
     # Load global operator
@@ -87,7 +84,8 @@ def main(config: Dict[str, Any]) -> None:
         operator, optimizer = checkpoint_loader.load(scope=globals())
     else:
         operator = GlobalOperator(
-            in_channels=in_channels, 
+            in_channels=train_dataset.in_channels, 
+            out_channels=train_dataset.out_channels,
             embedding_dim=embedding_dim,
             in_timesteps=train_dataset.in_timesteps, 
             out_timesteps=train_dataset.out_timesteps,

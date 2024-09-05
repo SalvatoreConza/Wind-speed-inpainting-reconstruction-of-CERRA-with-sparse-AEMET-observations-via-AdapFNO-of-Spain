@@ -1,13 +1,10 @@
-import os
-from typing import Tuple, List, Dict
+from typing import Tuple, List
 import datetime as dt
-import itertools
 
-import numpy as np
+from functools import lru_cache
 import xarray as xr
 
 import torch
-import torch.nn as nn
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
@@ -26,7 +23,6 @@ class ERA5_6Hour(Dataset):
         local_longitude: Tuple[float, float] | None,
         indays: int,
         outdays: int,
-        device: torch.device,
     ):
         """
         latitude: (a, b) in the range [90.0, 89.75, 89.5, ..., -89.5, -89.75, -90.0]
@@ -42,8 +38,10 @@ class ERA5_6Hour(Dataset):
         self.local_longitude: Tuple[int, int] | None = local_longitude
         self.indays: int = indays
         self.outdays: int = outdays
-        self.device: torch.device = device
         
+        self.in_channels: int = 20
+        self.out_channels: int = 2
+
         self.time_resolution: int = 6
         self.timesteps_per_day: int = 24 // self.time_resolution
         self.in_timesteps: int = self.timesteps_per_day * indays
@@ -64,20 +62,51 @@ class ERA5_6Hour(Dataset):
         ]
         assert len(self.slices) == len(self)
 
+        # Check global/local dataset
         self.has_global: bool = all([global_latitude, global_longitude])
         self.has_local: bool = all([local_latitude, local_longitude])
         assert self.has_global or self.has_local, 'either global or local must be specified'
 
+        # Precompute sub-dataset for faster indexing (xr.Dataset does lazy loading on )
         if self.has_global:
-            self.global_dataset: xr.Dataset = self.dataset.sel(
+            global_dataset: xr.Dataset = self.dataset.sel(
                 latitude=slice(*self.global_latitude), longitude=slice(*self.global_longitude),
             )
+            # Prepare global_subsets which contains (global input subset, global output subset)
+            global_subsets: List[Tuple[xr.Dataset, xr.Dataset]] = [
+                (global_dataset.isel(time=input_slice), global_dataset.isel(time=output_slice))
+                for input_slice, output_slice in self.slices
+            ]
+            # Prepare global_subsets which contains (surface subset, pressure subset, output subset)
+            self.global_subsets: List[Tuple[xr.Dataset, xr.Dataset, xr.Dataset]] = [
+                (
+                    global_input[['u10', 'v10', 't2m', 'msl', 'sp']], 
+                    global_input.sel(isobaricInhPa=[1000, 850, 500])[['z', 'r', 't', 'u', 'v']], 
+                    global_output[['u10', 'v10']],
+                )
+                for global_input, global_output in global_subsets
+            ]
 
         if self.has_local:
-            self.local_dataset: xr.Dataset = self.dataset.sel(
+            local_dataset: xr.Dataset = self.dataset.sel(
                 latitude=slice(*self.local_latitude), longitude=slice(*self.local_longitude),
             )
+            # Prepare local_subsets which contains (local input subset, local output subset)
+            local_subsets: List[Tuple[xr.Dataset, xr.Dataset]] = [
+                (local_dataset.isel(time=input_slice), local_dataset.isel(time=output_slice))
+                for input_slice, output_slice in self.slices
+            ]
+            # Prepare local_subsets which contains (surface subset, pressure subset, output subset)
+            self.local_subsets: List[Tuple[xr.Dataset, xr.Dataset, xr.Dataset]] = [
+                (
+                    local_input[['u10', 'v10', 't2m', 'msl', 'sp']], 
+                    local_input.sel(isobaricInhPa=[1000, 850, 500])[['z', 'r', 't', 'u', 'v']], 
+                    local_output[['u10', 'v10']],
+                )
+                for local_input, local_output in local_subsets
+            ]
 
+        # Compute resolution
         if self.has_global:
             if global_resolution is None:
                 self.global_resolution: Tuple[int, int] = (
@@ -98,66 +127,62 @@ class ERA5_6Hour(Dataset):
             self.local_resolution = None
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, ...]:
-        input_slice, output_slice = self.slices[idx]
-        
         sample: Tuple[torch.Tensor, ...] = tuple()
+
         if self.has_global:
-            global_input: torch.Tensor = self._dataset2tensor(
-                dataset=self.global_dataset.isel(time=input_slice), resize=self.global_resolution, is_output=False,
-            )
-            global_output: torch.Tensor = self._dataset2tensor(
-                dataset=self.global_dataset.isel(time=output_slice), resize=self.global_resolution, is_output=True,
-            )
+            global_input, global_output = self._to_tensor(idx=idx, is_global=True)
             sample += (global_input, global_output)
 
         if self.has_local:
-            local_input: torch.Tensor = self._dataset2tensor(
-                dataset=self.local_dataset.isel(time=input_slice), resize=None, is_output=False,
-            )
-            local_output: torch.Tensor = self._dataset2tensor(
-                dataset=self.local_dataset.isel(time=output_slice), resize=None, is_output=True,
-            )
+            local_input, local_output = self._to_tensor(idx=idx, is_global=False)
             sample += (local_input, local_output)
         
         return sample
 
     def __len__(self) -> int:
-        return (self.total_days - self.indays) // self.outdays 
+        return (self.total_days - self.indays) // self.outdays
 
-    def _dataset2tensor(
-        self, 
-        dataset: xr.Dataset, 
-        resize: Tuple[int, int] | None,
-        is_output: bool,
-    ) -> torch.Tensor:
-        if not is_output:
-            # Process surface level
-            subset: xr.Dataset = dataset[['u10', 'v10', 't2m', 'msl', 'sp']]
-            surface_level_tensor: torch.Tensor = torch.tensor(subset.to_array().values, device=self.device)
-            surface_level_tensor = surface_level_tensor.permute(1, 0, 2, 3)
-            # Process pressure levels
-            subset: xr.Dataset = dataset.sel(isobaricInhPa=[1000, 850, 500])[['z', 'r', 't', 'u', 'v']]
-            pressure_level_tensor: torch.Tensor = torch.tensor(subset.to_array().values, device=self.device)
-            pressure_level_tensor = pressure_level_tensor.permute(1, 2, 0, 3, 4).flatten(start_dim=1, end_dim=2)
-
-            out_tensor: torch.Tensor = torch.cat(tensors=[surface_level_tensor, pressure_level_tensor], dim=1)
+    @lru_cache(maxsize=10240)
+    def _to_tensor(self, idx: int, is_global: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+        if is_global:
+            surface_subset, pressure_subset, output_subset = self.global_subsets[idx]
+            resize: Tuple[int, int] = self.global_resolution
         else:
-            # Process surface level only
-            subset: xr.Dataset = dataset[['u10', 'v10']]
-            out_tensor: torch.Tensor = torch.tensor(subset.to_array().values, device=self.device)
-            out_tensor = out_tensor.permute(1, 0, 2, 3)
+            surface_subset, pressure_subset, output_subset = self.local_subsets[idx]
+            resize = None
 
-        if (resize is not None) and (resize != tuple(out_tensor.shape[-2:])):
-            print('Resizing...')
-            out_tensor = F.interpolate(input=out_tensor, size=resize, mode='bicubic')
+        # Process surface tensor
+        surface_level_tensor: torch.Tensor = torch.tensor(surface_subset.to_dataarray().values)
+        surface_level_tensor = surface_level_tensor.permute(1, 0, 2, 3)
+        # Process pressure tensor
+        pressure_level_tensor: torch.Tensor = torch.tensor(pressure_subset.to_dataarray().values)
+        pressure_level_tensor = pressure_level_tensor.permute(1, 2, 0, 3, 4).flatten(start_dim=1, end_dim=2)
+        # Merge to input tensor
+        in_tensor: torch.Tensor = torch.cat(tensors=[surface_level_tensor, pressure_level_tensor], dim=1)
+        assert in_tensor.ndim == 4 and in_tensor.shape == (
+            self.in_timesteps, self.in_channels, in_tensor.shape[2], in_tensor.shape[3]
+        )
+        # Resize
+        if (resize is not None) and (resize != tuple(in_tensor.shape[-2:])):
+            in_tensor = F.interpolate(input=in_tensor, size=resize, mode='bicubic')
         
-        return out_tensor
+        # Process output tensor
+        out_tensor: torch.Tensor = torch.tensor(output_subset.to_dataarray().values)
+        out_tensor = out_tensor.permute(1, 0, 2, 3)
+        assert out_tensor.ndim == 4 and out_tensor.shape == (
+            self.out_timesteps, self.out_channels, out_tensor.shape[2], out_tensor.shape[3]
+        )
+        # Resize
+        if (resize is not None) and (resize != tuple(out_tensor.shape[-2:])):
+            out_tensor = F.interpolate(input=out_tensor, size=resize, mode='bicubic')
+
+        return in_tensor, out_tensor
 
 
 if __name__ == '__main__':
 
     self = ERA5_6Hour(
-        dataroot='/root/data/final/out.grib',
+        dataroot='./data/out.grib',
         fromdate='20240101',
         todate='20240630',
         global_latitude=(5, -5),
@@ -167,7 +192,6 @@ if __name__ == '__main__':
         local_longitude=(86, 90),
         indays=3,
         outdays=2,
-        device=torch.device('cuda')
     )
 
     from torch.utils.data import DataLoader

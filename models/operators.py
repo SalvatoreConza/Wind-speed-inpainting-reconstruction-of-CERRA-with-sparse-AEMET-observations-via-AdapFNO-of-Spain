@@ -13,7 +13,9 @@ class _BaseOperator(nn.Module):
 
     def __init__(
         self, 
-        in_channels: int, embedding_dim: int,
+        in_channels: int, 
+        out_channels: int,
+        embedding_dim: int,
         in_timesteps: int, out_timesteps: int,
         n_layers: int, block_size: int,
         spatial_resolution: Tuple[int, int],
@@ -22,6 +24,7 @@ class _BaseOperator(nn.Module):
     ):
         super().__init__()
         self.in_channels: int = in_channels
+        self.out_channels: int = out_channels
         self.embedding_dim: int = embedding_dim
         self.in_timesteps: int = in_timesteps
         self.out_timesteps: int = out_timesteps
@@ -59,7 +62,7 @@ class _BaseOperator(nn.Module):
             ]
         )
         self.linear_decoder = LinearDecoder(
-            in_channels=self.embedding_dim, out_channels=self.in_channels,
+            in_channels=self.embedding_dim, out_channels=self.out_channels,
             in_timesteps=self.in_timesteps, out_timesteps=self.out_timesteps,
             n_xpatches=self.n_xpatches, n_ypatches=self.n_ypatches,
             patch_size=self.patch_size,
@@ -115,7 +118,7 @@ class _BaseOperator(nn.Module):
         assert output.shape == embedding.shape
         output: torch.Tensor = self.linear_decoder(output)
         assert output.shape == (
-            batch_size, self.out_timesteps, self.in_channels, self.spatial_resolution[0], self.spatial_resolution[1]
+            batch_size, self.out_timesteps, self.out_channels, self.spatial_resolution[0], self.spatial_resolution[1]
         )
         return output, *out_contexts
 
@@ -130,7 +133,9 @@ class LocalOperator(_BaseOperator):
 
     def __init__(
         self, 
-        in_channels: int, embedding_dim: int,
+        in_channels: int, 
+        out_channels: int,
+        embedding_dim: int,
         in_timesteps: int, out_timesteps: int,
         n_layers: int, block_size: int,
         spatial_resolution: Tuple[int, int],
@@ -138,7 +143,8 @@ class LocalOperator(_BaseOperator):
         n_attention_heads: int,
     ):
         super().__init__(
-            in_channels=in_channels, embedding_dim=embedding_dim, 
+            in_channels=in_channels, out_channels=out_channels,
+            embedding_dim=embedding_dim, 
             in_timesteps=in_timesteps, out_timesteps=out_timesteps,
             n_layers=n_layers, block_size=block_size, 
             spatial_resolution=spatial_resolution, patch_size=patch_size, 
@@ -161,7 +167,8 @@ if __name__ == '__main__':
     local_input: torch.Tensor = torch.rand((4, 12, 2, 128, 128)).to(device)
 
     global_operator = GlobalOperator(
-        in_channels=2, embedding_dim=512,
+        in_channels=2, out_channels=2,
+        embedding_dim=512,
         in_timesteps=12, out_timesteps=12,
         n_layers=4,
         block_size=16,

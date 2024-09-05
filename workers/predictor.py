@@ -14,7 +14,7 @@ from common.functional import compute_velocity_field
 from common.plotting import plot_predictions_2d
 
 from models.operators import GlobalOperator, LocalOperator
-from era5.datasets import Wind2dERA5
+from era5.datasets import ERA5_6Hour
 
 
 
@@ -29,11 +29,18 @@ class GlobalOperatorPredictor:
         self.global_operator: GlobalOperator = global_operator.to(device=self.device)
         self.loss_function: nn.Module = nn.MSELoss(reduction='sum').to(device=self.device)
 
-    def predict(self, dataset: Wind2dERA5, plot_resolution: Tuple[int, int] | None) -> None:
+    def predict(self, dataset: ERA5_6Hour, plot_resolution: Tuple[int, int] | None) -> None:
         # Set the operator to evaluation mode
         self.global_operator.eval()
         # Batch size must be 1, must not shuffle
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+        dataloader = DataLoader(
+            dataset, 
+            batch_size=1, 
+            shuffle=False, 
+            num_workers=4, 
+            prefetch_factor=3, 
+            pin_memory=True,
+        )
         # Use only the first input from the test dataset:
         global_input: torch.Tensor = next(iter(dataloader))[0].to(device=self.device)
         # Compute how many bundle from last step to keep 
@@ -100,14 +107,21 @@ class LocalOperatorPredictor:
         self.device: torch.device = device
         self.global_operator: GlobalOperator = global_operator.to(device=self.device)
         self.local_operator: LocalOperator = local_operator.to(device=self.device)
-        self.loss_function: nn.Module = nn.MSELoss(reduction='sum')
+        self.loss_function: nn.Module = nn.MSELoss(reduction='sum').to(device=self.device)
 
-    def predict(self, dataset: Wind2dERA5, plot_resolution: Tuple[int, int] | None) -> None:
+    def predict(self, dataset: ERA5_6Hour, plot_resolution: Tuple[int, int] | None) -> None:
         # Set the operator to evaluation mode
         self.global_operator.eval()
         self.local_operator.eval()
         # Batch size must be 1, must not shuffle
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+        dataloader = DataLoader(
+            dataset, 
+            batch_size=1, 
+            shuffle=False, 
+            num_workers=4, 
+            prefetch_factor=3,
+            pin_memory=True,
+        )
         # Use only the first input from the test dataset:
         first_input: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] = next(iter(dataloader))
         global_input: torch.Tensor = first_input[0].to(device=self.device)
