@@ -56,7 +56,6 @@ class ERA5_6Hour(Dataset):
         self.tensor_root: str = os.path.join(
             'tensors', 
             hash_params(
-                fromdate=fromdate, todate=todate, 
                 global_latitude=global_latitude, global_longitude=global_longitude,
                 local_latitude=local_latitude, local_longitude=local_longitude,
                 indays=indays, outdays=outdays,
@@ -105,10 +104,10 @@ class ERA5_6Hour(Dataset):
             global_output: torch.Tensor = torch.load(os.path.join(self.global_output_directory, f"GO{idx}.pt"))
             # Resize
             if (self.global_resolution is not None) and (self.global_resolution != tuple(global_input.shape[-2:])):
-                global_input = F.interpolate(input=global_input, size=self.global_resolution, mode='bicubic')
+                global_input = F.interpolate(input=global_input, size=self.global_resolution, mode='nearest')
 
             if (self.global_resolution is not None) and (self.global_resolution != tuple(global_output.shape[-2:])):
-                global_output = F.interpolate(input=global_output, size=self.global_resolution, mode='bicubic')
+                global_output = F.interpolate(input=global_output, size=self.global_resolution, mode='nearest')
             
             sample += (global_input, global_output)
 

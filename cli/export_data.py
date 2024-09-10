@@ -14,11 +14,10 @@ def main(config: Dict[str, Any]) -> None:
     """
 
     # Parse CLI arguments:
-    grib_path: str                          = str(config['grib_path'])
-    fromdate: str                           = str(config['fromdate'])
-    todate: str                             = str(config['todate'])
+    year: int                               = int(config['year'])
     global_latitude: Tuple[float, float]    = config['global_latitude']
     global_longitude: Tuple[float, float]   = config['global_longitude']
+    global_resolution: Tuple[float]         = config['global_resolution']
     local_latitude: Tuple[float, float]     = config['local_latitude']
     local_longitude: Tuple[float, float]    = config['local_longitude']
     indays: int                             = int(config['indays'])
@@ -26,11 +25,10 @@ def main(config: Dict[str, Any]) -> None:
 
     # Instatiate the training datasets
     train_dataset = TensorWriter(
-        grib_path=grib_path,
-        fromdate=fromdate,
-        todate=todate,
+        year=year,
         global_latitude=tuple(global_latitude) if global_latitude else None,
         global_longitude=tuple(global_longitude) if global_longitude else None,
+        global_resolution=tuple(global_resolution) if global_resolution else None,
         local_latitude=tuple(local_latitude) if local_latitude else None,
         local_longitude=tuple(local_longitude) if local_longitude else None,
         indays=indays,

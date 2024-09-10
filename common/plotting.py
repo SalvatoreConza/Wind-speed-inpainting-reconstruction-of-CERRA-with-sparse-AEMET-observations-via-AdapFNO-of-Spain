@@ -29,7 +29,7 @@ def plot_groundtruths_2d(
 
     # Resize:
     if resolution is not None:
-        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='bicubic')
+        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='nearest')
 
     # Ensure that the plot respect the tensor's shape
     x_res: int = groundtruths.shape[2]
@@ -93,8 +93,8 @@ def plot_predictions_2d(
 
     # Resize:
     if resolution is not None:
-        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='bicubic')
-        predictions: torch.Tensor = F.interpolate(input=predictions, size=resolution, mode='bicubic')
+        groundtruths: torch.Tensor = F.interpolate(input=groundtruths, size=resolution, mode='nearest')
+        predictions: torch.Tensor = F.interpolate(input=predictions, size=resolution, mode='nearest')
 
     # Ensure that the plot respect the tensor's shape
     x_res: int = groundtruths.shape[2]

@@ -4,6 +4,7 @@ from typing import Tuple, List
 
 import xarray as xr
 import torch
+import torch.nn.functional as F
 
 from common.functional import hash_params
 
@@ -12,11 +13,10 @@ class TensorWriter:
 
     def __init__(
         self,
-        grib_path: str,
-        fromdate: str,
-        todate: str,
+        year: int,
         global_latitude: Tuple[float, float] | None,
         global_longitude: Tuple[float, float] | None,
+        global_resolution: Tuple[float, float] | None,
         local_latitude: Tuple[float, float] | None,
         local_longitude: Tuple[float, float] | None,
         indays: int,
@@ -26,11 +26,10 @@ class TensorWriter:
         latitude: (a, b) in the range [90.0, 89.75, 89.5, ..., -89.5, -89.75, -90.0]
         longitude: (a, b) in the range [0.0, 0.25, 0.5, ..., 359.25, 359.5, 359.75]
         """
-        self.grib_path: str = grib_path
-        self.fromdate: dt.datetime = dt.datetime.strptime(fromdate, '%Y%m%d')
-        self.todate: dt.datetime = dt.datetime.strptime(todate, '%Y%m%d')
+        self.year: int = year
         self.global_latitude: Tuple[float, float] | None = global_latitude
         self.global_longitude: Tuple[float, float] | None = global_longitude
+        self.global_resolution: Tuple[float, float] | None = global_resolution
         self.local_latitude: Tuple[float, float] | None = local_latitude
         self.local_longitude: Tuple[float, float] | None = local_longitude
         self.indays: int = indays
@@ -39,15 +38,14 @@ class TensorWriter:
         self.in_channels: int = 20
         self.out_channels: int = 2
 
-        self.time_resolution: int = 6
+        self.time_resolution: int = 6   # fixed
         self.timesteps_per_day: int = 24 // self.time_resolution
         self.in_timesteps: int = self.timesteps_per_day * indays
         self.out_timesteps: int = self.timesteps_per_day * outdays
         
-        self.dataset: xr.Dataset = xr.open_dataset(grib_path, engine='cfgrib').sortby('time')
-        self.dataset = self.dataset.sel(
-            time=slice(self.fromdate, self.todate + dt.timedelta(days=1) - dt.timedelta(seconds=1))
-        )
+        self.grib_path: str = f'./data/{year}.grib'
+        assert os.path.isfile(self.grib_path), 'Data file is not available'
+        self.dataset: xr.Dataset = xr.open_dataset(self.grib_path, engine='cfgrib').sortby('time')
         self.total_timesteps: int = len(self.dataset.time)
 
         self.slices: List[Tuple[slice, slice]] = [
@@ -73,7 +71,6 @@ class TensorWriter:
         self.tensor_root: str = os.path.join(
             'tensors', 
             hash_params(
-                fromdate=fromdate, todate=todate, 
                 global_latitude=global_latitude, global_longitude=global_longitude,
                 local_latitude=local_latitude, local_longitude=local_longitude,
                 indays=indays, outdays=outdays,
@@ -97,13 +94,13 @@ class TensorWriter:
             print(f"Writing sample {idx + 1}/{len(self)}...")
             if self.has_global:
                 global_input, global_output = self._to_tensor(idx=idx, is_global=True)
-                torch.save(obj=global_input, f=os.path.join(self.global_input_directory, f'GI{idx}.pt'))
-                torch.save(obj=global_output, f=os.path.join(self.global_output_directory, f'GO{idx}.pt'))
+                torch.save(obj=global_input, f=os.path.join(self.global_input_directory, f'GI{self.year}_{idx}.pt'))
+                torch.save(obj=global_output, f=os.path.join(self.global_output_directory, f'GO{self.year}_{idx}.pt'))
 
             if self.has_local:
                 local_input, local_output = self._to_tensor(idx=idx, is_global=False)
-                torch.save(obj=local_input, f=os.path.join(self.local_input_directory, f'LI{idx}.pt'))
-                torch.save(obj=local_output, f=os.path.join(self.local_output_directory, f'LO{idx}.pt'))
+                torch.save(obj=local_input, f=os.path.join(self.local_input_directory, f'LI{self.year}_{idx}.pt'))
+                torch.save(obj=local_output, f=os.path.join(self.local_output_directory, f'LO{self.year}_{idx}.pt'))
 
     # DONE
     def _to_tensor(self, idx: int, is_global: bool) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -123,6 +120,9 @@ class TensorWriter:
         assert in_tensor.ndim == 4 and in_tensor.shape == (
             self.in_timesteps, self.in_channels, in_tensor.shape[2], in_tensor.shape[3]
         )
+        # Resize
+        if is_global and self.global_resolution is not None:
+            in_tensor = F.interpolate(input=in_tensor, size=self.global_resolution, mode='nearest')
 
         # Process output tensor
         out_tensor: torch.Tensor = torch.tensor(output_subset.to_dataarray().values)
@@ -130,6 +130,9 @@ class TensorWriter:
         assert out_tensor.ndim == 4 and out_tensor.shape == (
             self.out_timesteps, self.out_channels, out_tensor.shape[2], out_tensor.shape[3]
         )
+        # Resize
+        if is_global and self.global_resolution is not None:
+            out_tensor = F.interpolate(input=out_tensor, size=self.global_resolution, mode='nearest')
 
         return in_tensor, out_tensor
 
