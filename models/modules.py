@@ -156,7 +156,6 @@ class AFNOLayer(nn.Module):
         assert n_xpatches == self.n_xpatches
         assert n_ypatches == self.n_ypatches
 
-        residual: torch.Tensor = input
         output: torch.Tensor = self.ln1(input)
 
         # Fourier transform (Token mixing)
@@ -224,7 +223,6 @@ class AFNOLayer(nn.Module):
         )
         # Skip connection
         output = output + input
-        output = output + residual  # double skip
         residual = output
         # MLP
         output = self.ln2(output)
@@ -313,22 +311,19 @@ class LinearDecoder_(nn.Module):
         self.y_resolution: int = patch_size[1] * n_ypatches
 
         self.temporal_decoder = nn.Linear(in_features=in_timesteps, out_features=out_timesteps)
-        self.spatial_decoder = nn.Sequential(
-            nn.ConvTranspose2d(
-                in_channels=in_channels, 
-                out_channels=in_channels,
-                kernel_size=patch_size, 
-                stride=patch_size,
-            ),
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                padding=1,
-                padding_mode='replicate',
-            )
+        self.spatial_decoder = nn.ConvTranspose2d(
+            in_channels=in_channels, 
+            out_channels=out_channels,
+            kernel_size=patch_size, 
+            stride=patch_size,
         )
-
+        self.conv = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            padding=1,
+            padding_mode='replicate',
+        )
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         assert input.ndim == 5
@@ -340,6 +335,7 @@ class LinearDecoder_(nn.Module):
         # Spatial decoding
         output = output.flatten(start_dim=0, end_dim=1)
         output = self.spatial_decoder(output)
+        output = output + self.conv(output)
         assert output.shape == (
             batch_size * self.out_timesteps, self.out_channels, self.x_resolution, self.y_resolution
         )

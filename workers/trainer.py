@@ -289,6 +289,7 @@ class LocalOperatorTrainer(_BaseOperatorTrainer):
                 batch_global_input: torch.Tensor = batch_global_input.to(device=self.device)
                 batch_local_input: torch.Tensor = batch_local_input.to(device=self.device)
                 batch_local_groundtruth: torch.Tensor = batch_local_groundtruth.to(device=self.device)
+                # TODO: implement amp
                 # Forward propagation
                 self.optimizer.zero_grad()
                 batch_local_input += (

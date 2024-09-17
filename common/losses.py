@@ -68,7 +68,8 @@ class TemporalMSE(nn.Module):
         self.n_timesteps: int = n_timesteps
         self.reduction: str = reduction
         self.loss_function = nn.MSELoss(reduction='none')
-        self.temporal_weights: torch.Tensor = self._weight_distribution()
+        # self.temporal_weights: nn.Parameter = self._linearly_decayed_weights()
+        self.temporal_weights: nn.Parameter = self._exponentially_decayed_weights(decay_rate=0.1)
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         assert input.shape == target.shape
@@ -83,11 +84,16 @@ class TemporalMSE(nn.Module):
         
         return weighted_loss
 
-    def _weight_distribution(self) -> torch.Tensor:
+    def _linearly_decayed_weights(self) -> nn.Parameter:
         temporal_weights: torch.Tensor = torch.arange(
             start=self.n_timesteps, end=0, step=-1, 
             requires_grad=False,
         )
         temporal_weights = temporal_weights / temporal_weights.sum() * self.n_timesteps # weight_sum == n_timesteps, not 1
-        return temporal_weights.reshape(1, self.n_timesteps, 1, 1, 1)
+        return nn.Parameter(temporal_weights.reshape(1, self.n_timesteps, 1, 1, 1), requires_grad=False)
 
+    def _exponentially_decayed_weights(self, decay_rate: float) -> nn.Parameter:
+        # higher decay_rate leads to faster decay
+        temporal_weights: torch.Tensor = torch.exp(-decay_rate * torch.arange(self.n_timesteps))
+        temporal_weights = temporal_weights / temporal_weights.sum() * self.n_timesteps # weight_sum == n_timesteps, not 1
+        return nn.Parameter(data=temporal_weights.reshape(1, self.n_timesteps, 1, 1, 1), requires_grad=False)

@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 from models.modules import (
     InstanceNorm, PatchEmbedding, PositionalEmbedding, 
-    GlobalAttention, AFNOLayer, LinearDecoder_
+    GlobalAttention, AFNOLayer, LinearDecoder_, LinearDecoder
 )
 
 class _BaseOperator(nn.Module):
@@ -62,7 +62,7 @@ class _BaseOperator(nn.Module):
                 for _ in range(n_layers)
             ]
         )
-        self.linear_decoder = LinearDecoder_(
+        self.linear_decoder = LinearDecoder(
             in_channels=self.embedding_dim, out_channels=self.out_channels,
             in_timesteps=self.in_timesteps, out_timesteps=self.out_timesteps,
             n_xpatches=self.n_xpatches, n_ypatches=self.n_ypatches,
