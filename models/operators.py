@@ -69,7 +69,7 @@ class _BaseOperator(nn.Module):
             patch_size=self.patch_size,
         )
         self.dropout = nn.Dropout(p=dropout_rate)
-        self.attentions = None
+        self.global_attention = None
 
     def _get_embedding(self, input: torch.Tensor) -> torch.Tensor:
         # input dim = [batch_size, in_timesteps, in_channels, x_res, y_res)
@@ -113,10 +113,9 @@ class _BaseOperator(nn.Module):
             out_contexts.append(output)
 
             if in_contexts is not None:
-                assert self.attentions is not None, "`self.attentions` must be defined in subclass"
-                # Condition on input context
-                attention: GlobalAttention = self.attentions[i]
-                output = attention(global_context=in_contexts[i], local_context=output)
+                assert self.global_attention is not None, "`self.global_attention` must be defined in subclass"
+                # Condition on input context (shared cross attention)
+                output = self.global_attention(global_context=in_contexts[i], local_context=output)
 
         # Linear decoder
         assert output.shape == (
@@ -153,16 +152,12 @@ class LocalOperator(_BaseOperator):
             in_channels=in_channels, out_channels=out_channels,
             embedding_dim=embedding_dim, 
             in_timesteps=in_timesteps, out_timesteps=out_timesteps,
-            # TODO: bring to config
-            n_layers=1, block_size=block_size, 
+            n_layers=n_layers, block_size=block_size, 
             spatial_resolution=spatial_resolution, patch_size=patch_size, 
             dropout_rate=dropout_rate
         )
         self.n_attention_heads: int = n_attention_heads
-        self.attentions = nn.ModuleList([
-            GlobalAttention(embedding_dim=self.embedding_dim, n_heads=self.n_attention_heads)
-            for _ in range(self.n_layers)
-        ])
+        self.global_attention = GlobalAttention(embedding_dim=self.embedding_dim, n_heads=self.n_attention_heads)
 
     def forward(self, input: torch.Tensor, global_contexts: List[torch.Tensor]) -> torch.Tensor:
         return self._forward(input, in_contexts=global_contexts)[0]

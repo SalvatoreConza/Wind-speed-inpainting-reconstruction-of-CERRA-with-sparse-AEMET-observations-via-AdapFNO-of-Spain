@@ -37,6 +37,7 @@ def main(config: Dict[str, Any]) -> None:
 
     from_checkpoint: Optional[str]      = config['local_architecture']['from_checkpoint']
     global_checkpoint: str              = str(config['local_architecture']['global_checkpoint'])
+    n_layers: int                       = int(config['local_architecture']['n_layers'])
     block_size: int                     = int(config['local_architecture']['block_size'])
     patch_size: tuple                   = tuple(config['local_architecture']['patch_size'])
     dropout_rate: float                 = float(config['local_architecture']['dropout_rate'])
@@ -91,9 +92,9 @@ def main(config: Dict[str, Any]) -> None:
             embedding_dim=global_operator.embedding_dim,
             in_timesteps=global_operator.in_timesteps, 
             out_timesteps=global_operator.out_timesteps,
-            n_layers=global_operator.n_layers,
-            spatial_resolution=train_dataset.local_resolution,
+            n_layers=n_layers,
             block_size=block_size, 
+            spatial_resolution=train_dataset.local_resolution,
             patch_size=patch_size,
             dropout_rate=dropout_rate,
             n_attention_heads=n_attention_heads,

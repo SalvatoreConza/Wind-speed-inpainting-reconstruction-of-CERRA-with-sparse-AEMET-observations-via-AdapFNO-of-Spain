@@ -353,6 +353,8 @@ class GlobalAttention(nn.Module):
                 out_features=embedding_dim,
             ),
         )
+        self.query_ln = nn.LayerNorm(normalized_shape=embedding_dim)
+        self.key_ln = nn.LayerNorm(normalized_shape=embedding_dim)
 
     def forward(
         self, 
@@ -361,55 +363,25 @@ class GlobalAttention(nn.Module):
     ) -> torch.Tensor:
         assert global_context.ndim == local_context.ndim == 5
         assert global_context.shape[:2] == local_context.shape[:2]
-        batch_size, n_timesteps = local_context.shape[:2]
+        batch_size, in_timesteps = local_context.shape[:2]
         assert global_context.shape[-1] == local_context.shape[-1] == self.embedding_dim
         # NOTE: global_context and local_context may have diferent number of patches
 
         global_context_reshaped: torch.Tensor = self._transform_shape(input=global_context)
         local_context_reshaped: torch.Tensor = self._transform_shape(input=local_context)
-        # print(f'global_context_reshaped: {global_context_reshaped.mean().item()}')
-        # print(f'local_context_reshaped: {local_context_reshaped.mean().item()}')
-        # print('------')
         # Cross attention
         output: torch.Tensor = self.cross_attention(
-            query=local_context_reshaped, 
-            key=global_context_reshaped,
+            query=self.query_ln(local_context_reshaped), 
+            key=self.key_ln(global_context_reshaped),
             value=global_context_reshaped,
             attn_mask=None,
             need_weights=False, # to save significant memory for large sequence length
         )[0]
         output = local_context_reshaped + output
-        # output = self.feedforward(output) + output
-
-        # print(f'output: {output.mean().item()}')
-        # print(f'local_context_reshaped: {local_context_reshaped.mean().item()}')
-        # print(f'global_context_reshaped: {global_context_reshaped.mean().item()}')
-        # print('--------')
-        # output = self.feedforward1(output) + output
-
-        # # Cross attention
-        # output1: torch.Tensor = self.cross_attention2(
-        #     query=output, 
-        #     key=global_context_reshaped,
-        #     value=global_context_reshaped,
-        #     attn_mask=None,
-        #     need_weights=False, # to save significant memory for large sequence length
-        # )[0]
-        # output = output1 + output
-        # output = self.feedforward2(output) + output
-
-        # # Cross attention
-        # output1: torch.Tensor = self.cross_attention3(
-        #     query=output, 
-        #     key=global_context_reshaped,
-        #     value=global_context_reshaped,
-        #     attn_mask=None,
-        #     need_weights=False, # to save significant memory for large sequence length
-        # )[0]
-        # output = output1 + output
-
+        output = self.feedforward(output) + output
+  
         output = self._untransform_shape(
-            input=output, n_timesteps=n_timesteps, 
+            input=output, in_timesteps=in_timesteps, 
             n_xpatches=local_context.shape[2], n_ypatches=local_context.shape[3], 
         )
         assert output.shape == local_context.shape
@@ -418,15 +390,15 @@ class GlobalAttention(nn.Module):
     @staticmethod
     def _transform_shape(input: torch.Tensor) -> torch.Tensor:
         assert input.ndim == 5
-        batch_size, n_timesteps, n_xpatches, n_ypatches, embedding_dim = input.shape
+        batch_size, in_timesteps, n_xpatches, n_ypatches, embedding_dim = input.shape
         output: torch.Tensor = input.flatten(start_dim=1, end_dim=3) # attend to different space in different time
         return  output.permute(1, 0, 2) # n_timesteps * n_xpatches * n_ypatches, batch_size, embedding_dim
     
     @staticmethod
-    def _untransform_shape(input: torch.Tensor, n_timesteps: int, n_xpatches: int, n_ypatches: int) -> torch.Tensor:
+    def _untransform_shape(input: torch.Tensor, in_timesteps: int, n_xpatches: int, n_ypatches: int) -> torch.Tensor:
         assert input.ndim == 3
         sequence_length, batch_size, embedding_dim = input.shape
-        output: torch.Tensor = input.reshape(n_timesteps, n_xpatches, n_ypatches, batch_size, embedding_dim)
+        output: torch.Tensor = input.reshape(in_timesteps, n_xpatches, n_ypatches, batch_size, embedding_dim)
         return output.permute(3, 0, 1, 2, 4)   # batch_size, n_timesteps, n_xpatches, n_ypatches, embedding_dim
 
 

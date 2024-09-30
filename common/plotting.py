@@ -104,7 +104,8 @@ def plot_predictions_2d(
     # Set plot configuration
     cmap: str = 'jet'
     vmin: float = 0.
-    vmax: float = groundtruth.max().item()
+    vmax: float = 15.
+    # vmax: float = groundtruth.max().item()
 
     for t in range(prediction.shape[0]):
         gt_field: torch.Tensor = groundtruth[t]

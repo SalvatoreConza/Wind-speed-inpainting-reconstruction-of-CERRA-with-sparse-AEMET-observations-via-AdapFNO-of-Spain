@@ -118,8 +118,7 @@ class LocalOperatorPredictor:
             # Make one-step prediction
             global_contexts: Tuple[torch.Tensor, ...]
             _, *global_contexts = self.global_operator(input=global_input)
-            local_prediction: torch.Tensor
-            local_prediction, *_ = self.local_operator(
+            local_prediction: torch.Tensor = self.local_operator(
                 input=local_input, global_contexts=list(global_contexts)
             )
             assert local_prediction.shape == local_groundtruth.shape
