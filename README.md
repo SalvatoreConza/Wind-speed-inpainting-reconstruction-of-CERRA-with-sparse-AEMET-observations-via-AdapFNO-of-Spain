@@ -26,6 +26,14 @@ This codebase accompanies our NeurIPS 2025 Workshop paper:
 
 ---
 
+## 📐 Architecture
+
+The figure below illustrates the overall architecture of **AdaptFNO**:
+
+![AdaptFNO Architecture](AdaptFNO.png)
+
+---
+
 ## ✨ Features
 
 - **Dynamic spectral mode allocation** to handle both low- and high-frequency structures.  
