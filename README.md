@@ -3,10 +3,10 @@
 [![NeurIPS 2025 Workshop](https://img.shields.io/badge/NeurIPS%202025-Workshop-blue)](https://neurips.cc/Conferences/2025/Schedule)
 
 **Authors:**  
-Hiep Vo Dang (Yeshiva University),  
-Bach D. G. Nguyen (Michigan State University),  
-Phong C. H. Nguyen (Phenikaa University),  
-Truong-Son Hy (University of Alabama at Birmingham)
+Hiep Vo Dang (Yeshiva University)
+Bach D. G. Nguyen (Michigan State University)
+Phong C. H. Nguyen (Phenikaa University)
+Truong-Son Hy (University of Alabama at Birmingham) - Correspondence to thy@uab.edu
 
 ---
 
