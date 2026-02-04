@@ -41,22 +41,27 @@ The figure below illustrates the overall architecture of **AdaptFNO**:
   - Global operator (low-res, large-scale patterns)  
   - Local operator (high-res, fine details)  
 - **Cross-attention mechanism** for efficient knowledge transfer from global to local forecasts.  
-- **Validated on ERA5 reanalysis data** with case studies (e.g., Typhoon Yagi).  
+- **Validated on CERRA reanalysis data** with case studies.  
 
 ---
 
 ## 📂 Repository Structure
 
 ```
-AdaptFNO-main/
+WSAdaptFNO/
 │
-├── models/              # AdaptFNO, FNO, and baseline model definitions
-├── data/                # Scripts for downloading and preprocessing ERA5 data
-├── training/            # Training loop, loss functions, and optimization setup
+├── models/              # AdaptFNO, normalization, local and global operators
+├── data/                # scripts for dataloading and storage of the normalizations quantities
 ├── utils/               # Helper functions (metrics, visualization, etc.)
-├── experiments/         # Example experiment configurations
-├── figures/             # Plots of results (e.g., Typhoon Yagi trajectory)
-└── main.py              # Entry point for training and evaluation
+├── mlruns/              # important that is created with the subfolder "0", otherwise mlflow is not working
+├── checkpoints/
+├── inference.py
+├── compute.stat.py
+├── train.py
+├── notebook.ipynb
+└── READ.ME              
+
+the folder as cli common, era5
 ```
 
 ---
@@ -80,10 +85,7 @@ Recommended environment:
 
 ## 📊 Dataset
 
-We use the **ERA5 reanalysis dataset** (hourly data on pressure levels 250, 500, 850 hPa).  
-- Download from [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/).  
-- Preprocessing scripts are provided in `data/`.
-
+We use the **CERRA reanalysis dataset**
 **Variables included:**  
 - U/V wind components  
 - Vertical velocity  
@@ -92,29 +94,11 @@ We use the **ERA5 reanalysis dataset** (hourly data on pressure levels 250, 500,
 - Geopotential  
 
 Data is split chronologically:  
-- **Training:** 1980–2022  
-- **Validation:** 2023–2024  
-
+- **Training:** 2010-2029  
+- **Validation:** 2020-2020 
+- **Inference:** 2021-2022
 ---
 
-## 🚀 Usage
-
-### Training
-Run the following to train AdaptFNO:
-```bash
-python main.py --config configs/adaptfno.yaml
-```
-
-### Evaluation
-To evaluate a trained model:
-```bash
-python main.py --config configs/adaptfno.yaml --eval
-```
-
-### Baseline Models
-Configs for CNN and standard FNO are provided under `configs/`.
-
----
 
 ## 📈 Results
 

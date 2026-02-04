@@ -1,0 +1,14 @@
+artifact_uri: /workspace/AdaptFNO/mlruns/697737932191653138/ea3c2633818440be98e216975b1f5ba2/artifacts
+end_time: 1769510717589
+entry_point_name: ''
+experiment_id: '697737932191653138'
+lifecycle_stage: active
+run_id: ea3c2633818440be98e216975b1f5ba2
+run_name: Run_Patch25_Embed256
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1769510711145
+status: 4
+tags: []
+user_id: root
