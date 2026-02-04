@@ -61,8 +61,6 @@ WSAdaptFNO/
 ├── notebook.ipynb
 └── READ.ME              
 
-the folder as cli common, era5
-```
 
 ---
 
