@@ -125,6 +125,5 @@ This is the paper I used:
 
 ## 🤝 Acknowledgements
 
-- ERA5 dataset (ECMWF / Copernicus Climate Data Store).  
+- CERRA dataset (Copernicus Climate Data Store).  
 - Fourier Neural Operator (Li et al., ICLR 2021).  
-- FourCastNet (Pathak et al., 2022).  
